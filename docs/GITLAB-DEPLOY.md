@@ -54,6 +54,19 @@ Los jobs Docker usan **`docker:24-cli` + servicio `docker:24-dind`**. Si usás e
 
 GitLab SaaS runners compartidos suelen ejecutar estos jobs sin configuración extra; si ves fallos de conexión al daemon, revisá [documentación DinD GitLab](https://docs.gitlab.com/ee/ci/docker/using_docker_build.html).
 
+## Troubleshooting — “Definí AWS_ROLE_ARN…” / caída antes del `docker push`
+
+Ese fallo aparece cuando **GitLab no pudo obtener credenciales AWS** válidas (`before_script`). No es Docker: es login AWS/ECR.
+
+| Síntoma | Qué revisar |
+|--------|--------------|
+| Nunca cargaste **`AWS_ROLE_ARN`** ni claves IAM | **Settings → CI/CD → Variables:** agregá `AWS_ROLE_ARN` (OIDC) **o** `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`. |
+| Cargaste `AWS_ROLE_ARN` pero el JWT llega vacío | Trust policy del rol en IAM (issuer GitLab `https://gitlab.com`, `aud` coincide con **`https://gitlab.com`**), proyecto/ruta/`sub` permitidos. |
+| Las variables están **Protected** pero el job corre en rama/tag **sin proteger** | GitLab **no inyecta** variables Protected. Desmarcá *Protected*, o marcá **`main`** / **`develop`** como ramas protegidas y lanzá pipeline ahí. |
+| Typo | Nombre exacto: `AWS_ROLE_ARN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`. |
+
+Cuando algo de OIDC IAM no cuadra, podés usar **usuario IAM con claves** (solo entorno POC) sólo hasta dejar bien el rol OIDC.
+
 ## Orden recomendado (copiado del doc hub)
 
 ```text

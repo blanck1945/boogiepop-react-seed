@@ -58,8 +58,27 @@ variables:
       AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
       AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
       export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-    elif [ -z "${AWS_ACCESS_KEY_ID}" ] || [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then
-      echo "Definí AWS_ROLE_ARN (OIDC en el job) o AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY."
+    elif [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+      echo "AWS: autenticación con claves estáticas IAM (sin OIDC)."
+    else
+      echo "=============================================="
+      echo "Falta autenticación AWS para este job."
+      echo "Opciones (una sola rutina suficiente):"
+      echo "  1) OIDC — Variable CI/AWS_ROLE_ARN + JWT del job (id_tokens en YAML)."
+      echo "     Si AWS_ROLE_ARN está definido pero falla igual: el JWT llegó vacío (runner,"
+      echo "     versión GitLab u OIDC IAM mal configurado)."
+      echo "  2) Claves — Variables AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY (Masked)."
+      echo ""
+      echo "Variables marcadas sólo como Protected: sólo aplican si la pipeline corre en una"
+      echo "rama o tag PROTEGIDO. Si ejecutás desde rama/feature sin proteger, vacíalas de"
+      echo "Protected o protegé la referencia donde corre el job."
+      echo "=============================================="
+      if [ -n "${AWS_ROLE_ARN:-}" ] && [ -z "${GITLAB_OIDC_TOKEN:-}" ]; then
+        echo "(Detectado AWS_ROLE_ARN pero GITLAB_OIDC_TOKEN vacío — revisá OIDC IAM o usar claves)."
+      fi
+      if [ -z "${AWS_ROLE_ARN:-}" ]; then
+        echo "(AWS_ROLE_ARN no está definido en CI/CD Variables o no llega por Protected.)"
+      fi
       exit 1
     fi
   - aws sts get-caller-identity
