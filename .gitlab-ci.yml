@@ -1,7 +1,7 @@
 # GitLab CI — linux/arm64 → ECR (`boogiepop-remote`) + ECS opcional.
 #
 # develop (push): lint + build/push imagen (:develop + :SHA)
-# main (solo merge MR en GitLab): retag :SHA → :latest + deploy_ecs manual (no bloquea pipeline)
+# main (merge MR): retag develop → :latest + deploy_ecs automático (manual si DEPLOY_ECS=manual)
 # Push directo a main SIN merge (p. ej. sync de refs): NO crea pipeline en main
 # Hotfix: variable CI RUN_MAIN_PIPELINE=true en push a main
 #
@@ -25,6 +25,9 @@ stages:
 variables:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: boogiepop-remote
+  # Defaults alineados a boogiepop-host/docs/DEPLOY-REMOTES.md (sobrescribir en CI/CD si difieren).
+  ECS_CLUSTER: boogiepop-api-cluster
+  ECS_SERVICE: boogiepop-api-fe-remote-svc
   VITE_REMOTE_BASE: "/"
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
@@ -44,6 +47,8 @@ variables:
 
 .if_merge_to_main_deploy:
   rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $DEPLOY_ECS == "manual"
+      when: manual
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)see merge request/
       when: on_success
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)merge branch .+ into .?main/
@@ -52,8 +57,6 @@ variables:
       when: on_success
     - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"
       when: on_success
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $DEPLOY_ECS == "manual"
-      when: manual
 
 .if_release_tag:
   rules:
@@ -277,6 +280,9 @@ deploy_ecs:
       aud: https://gitlab.com
   needs:
     - job: ecr_promote_latest
+      optional: true
+    - job: docker_publish
+      optional: true
   allow_failure: true
   rules:
     - !reference [.if_merge_to_main_deploy, rules]

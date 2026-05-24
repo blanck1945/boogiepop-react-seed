@@ -28,7 +28,7 @@ Pasos típicos en GitLab después del primer push:
 1. **`lint`** — push a `develop`, merge a `main`, o tag release.
 2. **`docker_publish`** — **solo `develop`** (y tags): build ARM64 → ECR.
 3. **`ecr_promote_latest`** — **solo merge a `main`**: busca imagen en ECR por orden — SHA del **2º padre del merge** (tip de develop), tag **`:develop`**, luego `:SHA` del merge. El commit de merge tiene SHA **distinto** al build de develop.
-4. **`deploy_ecs`** — manual en main/tags; **`allow_failure: true`** (pipeline **Passed**, deploy opcional).
+4. **`deploy_ecs`** — tras merge a **`main`**: corre **automático** (`on_success`) si existen **`ECS_CLUSTER`** y **`ECS_SERVICE`**. Para volver al botón manual: variable **`DEPLOY_ECS=manual`**. `allow_failure: true` si faltan vars ECS.
 
 ### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)
 
@@ -38,8 +38,8 @@ Pasos típicos en GitLab después del primer push:
 | `AWS_REGION` | No | Por defecto `us-east-1`. |
 | `ECR_REPOSITORY` | No | Por defecto `boogiepop-remote` (nombre alineado a Terraform/DEPLOY-REMOTES). |
 | **`VITE_REMOTE_BASE`** | Sí en prod | URL pública del remote **terminada en `/`**, ej. `https://mf.tudominio.com/`. Si falla mal, los chunks MF dan 404. |
-| `ECS_CLUSTER` | Para deploy_ecs | Ej. `boogiepop-api-cluster`. |
-| `ECS_SERVICE` | Para deploy_ecs | Ej. `boogiepop-api-fe-remote-svc`. |
+| `ECS_CLUSTER` | No (default en YAML) | Por defecto **`boogiepop-api-cluster`**. |
+| `ECS_SERVICE` | No (default en YAML) | Por defecto **`boogiepop-api-fe-remote-svc`**. |
 
 Opcionalmente usá variables **marcadas Protected** por entorno (p. ej. `VITE_REMOTE_BASE` distinto en `develop` vs `main` mediante entornos o variables por reglas en GitLab 15.7+).
 
