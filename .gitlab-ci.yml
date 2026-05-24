@@ -1,45 +1,20 @@
-# GitLab CI — imagen linux/arm64 → ECR (repo `boogiepop-remote`) y rollout ECS opcional.
+# GitLab CI — imagen linux/arm64 → ECR (`boogiepop-remote`) y rollout ECS opcional.
 # Contrato deploy: ../boogiepop-host/docs/DEPLOY-REMOTES.md
 #
-# Modelo de ramas: main → prod (+ :latest); develop → staging (+ :develop); tags vX.Y.Z.
-# MR (p. ej. develop→main): solo lint — sin ECR ni ECS (evita deploy_ecs bloqueado).
-# Push a main/develop: publish; deploy_ecs manual solo en main.
+# Pipelines (sin duplicados MR + rama):
+#   push develop → solo develop (lint + publish :develop)
+#   push main    → solo main (lint + publish :latest + deploy_ecs manual)
+#   tag v*.*.*   → publish + deploy_ecs manual
+#   MR → main    → no crea pipeline (validación al mergear = push main)
 #
-# Nota runners: usa Ubuntu + instalador oficial AWS CLI v2 (glibc). El paquete
-# alpine `apk add aws-cli` puede romperse con pyexpat/libexpat en musl.
-#
-# Variables CI/CD (ejemplos Escenario B):
-#   AWS_REGION=us-east-1
-#   ECR_REPOSITORY=boogiepop-remote   # debe existir en ECR o tener permiso ecr:CreateRepository
-#   VITE_REMOTE_BASE=https://mf.tudominio.com/
-#   AWS_ROLE_ARN=arn:aws:iam::CUENTA:role/gitlab-ecr-ecs     # recomendado: OIDC
-#   ECS_CLUSTER=boogiepop-api-cluster                         # opcional
-#   ECS_SERVICE=boogiepop-api-fe-remote-svc                   # opcional (+ job manual)
-#
-# IAM trust (OIDC): proveedor GitLab.com, audiencia https://gitlab.com
-# Runner: Docker-in-Docker; cliente desde Ubuntu docker.io debe alinear API con DinD.
+# Variables CI/CD: AWS_*, ECR_REPOSITORY, VITE_REMOTE_BASE, ECS_CLUSTER/SERVICE (deploy).
 
 workflow:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_TAG
-    # Evita pipeline de rama duplicada mientras hay MR abierto en esa rama.
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "push"
-
-# Solo push directo a main/develop (nunca MR ni otras ramas).
-.if_push_main: &if_push_main
-  if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
-
-.if_push_develop: &if_push_develop
-  if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-
-.if_push_release_tag: &if_push_release_tag
-  if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
-
-.if_mr: &if_mr
-  if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - when: never
 
 stages:
   - lint
@@ -58,13 +33,9 @@ variables:
     name: ubuntu:22.04
     entrypoint: [""]
   services:
-    # Debe coincidir con ubuntu docker.io (~29.x / API ≥1.52); DinD viejo ⇒ "client too new".
     - name: docker:29-dind
       command: ["--tls=false"]
 
-# Instalador oficial AWS CLI v2 (GLIBC); sin paquete Alpine aws-cli frágil musl/expat.
-# Usar solo `set -e` (no `-u`): before_script corre en el mismo shell y vars CI opcionales
-# como AWS_ROLE_ARN no deben disparar nounset antes del bloc de auth.
 .ubuntu_tools_aws_docker_publish: &ubuntu_tools_aws_docker_publish
   - |
     set -e
@@ -125,20 +96,9 @@ variables:
       echo "Falta autenticación AWS para este job."
       echo "Opciones (una sola rutina suficiente):"
       echo "  1) OIDC — Variable CI/AWS_ROLE_ARN + JWT del job (id_tokens en YAML)."
-      echo "     Si AWS_ROLE_ARN está definido pero falla igual: el JWT llegó vacío (runner,"
-      echo "     versión GitLab u OIDC IAM mal configurado)."
       echo "  2) Claves — Variables AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY (Masked)."
-      echo ""
-      echo "Variables marcadas sólo como Protected: sólo aplican si la pipeline corre en una"
-      echo "rama o tag PROTEGIDO. Si ejecutás desde rama/feature sin proteger, vacíalas de"
-      echo "Protected o protegé la referencia donde corre el job."
+      echo "Variables Protected: solo aplican en ramas/tags protegidos."
       echo "=============================================="
-      if [ -n "${AWS_ROLE_ARN:-}" ] && [ -z "${GITLAB_OIDC_TOKEN:-}" ]; then
-        echo "(Detectado AWS_ROLE_ARN pero GITLAB_OIDC_TOKEN vacío — revisá OIDC IAM o usar claves)."
-      fi
-      if [ -z "${AWS_ROLE_ARN:-}" ]; then
-        echo "(AWS_ROLE_ARN no está definido en CI/CD Variables o no llega por Protected.)"
-      fi
       exit 1
     fi
   - aws sts get-caller-identity
@@ -180,8 +140,9 @@ lint:
   script:
     - npm run lint
   rules:
-    - *if_mr
-    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
 
 docker_publish:
   extends: .docker_dind_ubuntu
@@ -224,13 +185,10 @@ docker_publish:
         ${TAGS} \
         .
   rules:
-    - *if_mr
-      when: never
-    - *if_push_main
-    - *if_push_develop
-    - *if_push_release_tag
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
 
-# Rollout ECS prod: solo tras push a main (manual). develop publica imagen :develop sin este job.
 deploy_ecs:
   stage: deploy
   image:
@@ -241,13 +199,10 @@ deploy_ecs:
       aud: https://gitlab.com
   needs:
     - job: docker_publish
-      optional: true
   rules:
-    - *if_mr
-      when: never
-    - <<: *if_push_main
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
       when: manual
-    - *if_push_release_tag
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
       when: manual
   before_script:
     - *deploy_ecs_ubuntu_prep
