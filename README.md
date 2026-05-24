@@ -106,7 +106,11 @@ Luego probá:
 
 ## CI: ECR + (opcional) ECS
 
+### GitHub Actions
+
 Workflow: [`.github/workflows/docker-ecr-ecs.yml`](.github/workflows/docker-ecr-ecs.yml)
+
+**Guía hub ↔ remote (manifest, orden de deploy, Escenario ALB vs dominio):** [`../boogiepop-host/docs/DEPLOY-REMOTES.md`](../boogiepop-host/docs/DEPLOY-REMOTES.md)
 
 - Gatillo inicial: **`workflow_dispatch`** para no hacer fallar forks sin OIDC en AWS (podés volver a añadir `push` cuando tengáis cuenta y roles).
 - **Secret recomendado:** `AWS_ROLE_ARN` — rol IAM de GitHub Actions vía OIDC (“OpenID Connect”) con permisos mínimos a ECR (+ ECS opcional).
@@ -116,12 +120,16 @@ Workflow: [`.github/workflows/docker-ecr-ecs.yml`](.github/workflows/docker-ecr-
 | Variable | Uso |
 |----------|-----|
 | `AWS_REGION` | Región AWS (fallback `us-east-1`). |
-| `ECR_REPOSITORY` | Nombre del repo ECR (`boogiepop-react-seed` por defecto si vacío). |
+| `ECR_REPOSITORY` | Nombre del repo ECR (`boogiepop-react-seed` en el YAML si vacío). Para alinear Terraform/DEPLOY-REMOTES usá **`boogiepop-remote`**. |
 | `VITE_REMOTE_BASE` | `base` público durante el build de la imagen (por defecto `/`). |
 | `ECS_CLUSTER` | Si está definido **no vacío**, el job intenta **`update-service ... --force-new-deployment`**. |
 | `ECS_SERVICE` | Idem anterior. |
 
-> El paso ECS asume que la definición de tarea usa una imagen ECR donde actualizás **`latest`** o etiquetas coherentes (`:latest` también se etiqueta desde CI con el mismo digest que el SHA del commit). Si usáis solo tags inmutables, registrá una nueva revisión de task con la imagen `:$GITHUB_SHA`.
+### GitLab CI
+
+Pipeline [`.gitlab-ci.yml`](.gitlab-ci.yml): **lint** en MR/push de rama; **`docker_publish`** (Docker **linux/arm64** → ECR **`boogiepop-remote`** por defecto) en `main`, `develop` y tags **`v*.*.*`**; **`deploy_ecs`** manual. Ramas protegidas, OIDC IAM y variables: [`docs/GITLAB-DEPLOY.md`](docs/GITLAB-DEPLOY.md).
+
+> En **GitHub Actions** o **GitLab CI**, si la task ECS apunta a `:latest`, `:develop` o al SHA del pipeline, alcanza con **`force-new-deployment`** tras el push a ECR; con **sólo tags inmutables**, registrá una nueva revisión de task con la etiqueta de imagen nueva.
 
 ### ECS: definición de tarea ejemplo
 
