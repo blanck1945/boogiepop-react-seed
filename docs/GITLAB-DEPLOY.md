@@ -9,9 +9,12 @@ Recomendado:
 | Rama | Propósito | Imagen ECR |
 |------|-----------|------------|
 | **`main`** | Producción (Escenario B) | `:latest` + `:«short-sha»` |
-| **`develop`** | Integración / staging | Push directo: `lint` + `:develop` en ECR (**sin** `deploy_ecs`) |
-| **MR → `main`** | Revisión en GitLab | **No dispara pipeline** (evita duplicar con develop); al **mergear** corre pipeline de **push `main`** |
-| **Push / merge a `main`** | Producción | `lint` + `:latest` + **`deploy_ecs` manual** |
+| **`develop`** | Push `git push origin develop` | `lint` + build ECR **`:develop`** + **`:SHA`** |
+| **Merge MR → `main`** (botón en GitLab) | Commit con `See merge request !` o `Merge branch … into 'main'` | `lint` + **retag** `:SHA` → **`:latest`** + `deploy_ecs` manual (opcional, no bloquea) |
+| **Push directo a `main`** (mismo SHA que develop, sin merge) | Sync accidental / `git push --all` | **No corre pipeline** en main |
+| **Hotfix en `main`** | Variable **`RUN_MAIN_PIPELINE=true`** en el push | Pipeline completa de main |
+
+> Si ves **dos pipelines** (develop + main) con el **mismo SHA**, casi siempre se hizo **push a las dos ramas** (`git push --all` o push main+develop). Para día a día: **`git push origin develop`** solamente.
 
 Pasos típicos en GitLab después del primer push:
 
@@ -22,9 +25,10 @@ Pasos típicos en GitLab después del primer push:
 
 ### Etapas
 
-1. **`lint`** — push a `main` / `develop` o tag `v*.*.*`.
-2. **`docker_publish`** — solo **push** a `main` o `develop`, o tag release (nunca MR).
-3. **`deploy_ecs`** — **manual**, solo **push a `main`** o tag release.
+1. **`lint`** — push a `develop`, merge a `main`, o tag release.
+2. **`docker_publish`** — **solo `develop`** (y tags): build ARM64 → ECR.
+3. **`ecr_promote_latest`** — **solo merge a `main`**: copia manifest `:SHA` → `:latest` (sin rebuild).
+4. **`deploy_ecs`** — manual en main/tags; **`allow_failure: true`** (pipeline **Passed**, deploy opcional).
 
 ### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)
 
