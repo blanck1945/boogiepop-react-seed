@@ -9,7 +9,7 @@
 #
 # Variables CI/CD (ejemplos Escenario B):
 #   AWS_REGION=us-east-1
-#   ECR_REPOSITORY=boogiepop-remote
+#   ECR_REPOSITORY=boogiepop-remote   # debe existir en ECR o tener permiso ecr:CreateRepository
 #   VITE_REMOTE_BASE=https://mf.tudominio.com/
 #   AWS_ROLE_ARN=arn:aws:iam::CUENTA:role/gitlab-ecr-ecs     # recomendado: OIDC
 #   ECS_CLUSTER=boogiepop-api-cluster                         # opcional
@@ -177,7 +177,16 @@ docker_publish:
   before_script:
     - *ubuntu_tools_aws_docker_publish
     - *aws_assume_role
-    - aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" --region "${AWS_REGION}"
+    - |
+      if ! aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+        echo "Repos ECR '${ECR_REPOSITORY}' no existe; creando (${AWS_REGION})…"
+        aws ecr create-repository \
+          --repository-name "${ECR_REPOSITORY}" \
+          --region "${AWS_REGION}" \
+          --image-scanning-configuration scanOnPush=true
+      else
+        echo "ECR OK: ${ECR_REPOSITORY}"
+      fi
     - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
     - docker buildx create --use --name ci-arm --driver docker-container 2>/dev/null || docker buildx use ci-arm
     - docker buildx inspect --bootstrap

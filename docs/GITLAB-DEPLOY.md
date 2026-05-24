@@ -46,11 +46,11 @@ Opcionalmente usá variables **marcadas Protected** por entorno (p. ej. `VITE_RE
    - `"gitlab.com/sub": "project_path:boogiepop-phatom/boogiepop-react-seed:ref_type:branch:ref:*"`
    (ajustá namespace y proyecto; revisá política oficial GitLab/AWS).
 
-3. Política del rol: mínimo `ecr:GetAuthorizationToken` + permisos push al repo `boogiepop-remote`; si usás **`deploy_ecs`**, sumá `ecs:UpdateService`, `ecs:DescribeServices`, etc., sobre tu cluster/servicio.
+3. Política del rol/usuario IAM: **`ecr:GetAuthorizationToken`**; escritura sobre el repos **`ECR_REPOSITORY`** (`BatchCheckLayerAvailability`, `PutImage`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`). Para que **el job cree el repos la primera vez** (sin hacerlo antes en Terraform/consola), añadí **`ecr:DescribeRepositories`** y **`ecr:CreateRepository`**.
 
 ### Runner
 
-Los jobs Docker usan **`docker:24-cli` + servicio `docker:24-dind`**. Si usás ejecutores propios, suele hacer falta modo **privileged** o executor compatible con DinD.
+Los jobs Docker usan **Ubuntu 22.04** como cliente (**awscliv2** + **`docker.io`**) y servicio **`docker:29-dind`**. Si usás ejecutores propios, suele hacer falta modo **privileged** o executor compatible con DinD.
 
 GitLab SaaS runners compartidos suelen ejecutar estos jobs sin configuración extra; si ves fallos de conexión al daemon, revisá [documentación DinD GitLab](https://docs.gitlab.com/ee/ci/docker/using_docker_build.html).
 
@@ -62,7 +62,7 @@ Ese fallo aparece cuando **GitLab no pudo obtener credenciales AWS** válidas (`
 |--------|--------------|
 | Nunca cargaste **`AWS_ROLE_ARN`** ni claves IAM | **Settings → CI/CD → Variables:** agregá `AWS_ROLE_ARN` (OIDC) **o** `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`. |
 | Cargaste `AWS_ROLE_ARN` pero el JWT llega vacío | Trust policy del rol en IAM (issuer GitLab `https://gitlab.com`, `aud` coincide con **`https://gitlab.com`**), proyecto/ruta/`sub` permitidos. |
-| Las variables están **Protected** pero el job corre en rama/tag **sin proteger** | GitLab **no inyecta** variables Protected. Desmarcá *Protected*, o marcá **`main`** / **`develop`** como ramas protegidas y lanzá pipeline ahí. |
+| **`RepositoryNotFoundException`** (`boogiepop-remote`…) | Creá el repo en **AWS ECR** (misma cuenta/región) o poné **`ECR_REPOSITORY`** al nombre real (Terraform/GitOps). Si el usuario/rol tiene **`ecr:CreateRepository`**, el pipeline creará el repo la primera vez. |
 | `XML_SetAllocTrackerActivationThreshold` / pyexpat al correr `aws` | **`apk add aws-cli` en Alpine** (musl/expat); usá `.gitlab-ci.yml` actual (**Ubuntu + instalador oficial** awscliv2). |
 | `AWS_ROLE_ARN: unbound variable` tras `docker info` | **`set -u`** heredaba del script de bootstrap en el mismo `before_script`; si no definís OIDC **`AWS_ROLE_ARN`**, falla antes del `elif` de claves. Versión pipeline: sólo **`set -e`** en el instalador + tests con **`${AWS_ROLE_ARN:-}`**. |
 | `docker info` API `client … too new` / `Maximum supported API version is …` | **Cliente Docker (ubuntu `docker.io`) más nuevo que el servicio `docker:*-dind`.** Mantener **misma generación mayor** en `.gitlab-ci.yml` (`docker:NN-dind` vs cliente) o usar **`DOCKER_API_VERSION`** sólo como apaño puntual. |
