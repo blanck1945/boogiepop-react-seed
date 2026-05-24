@@ -28,7 +28,7 @@ Pasos típicos en GitLab después del primer push:
 1. **`lint`** — push a `develop`, merge a `main`, o tag release.
 2. **`docker_publish`** — **solo `develop`** (y tags): build ARM64 → ECR.
 3. **`ecr_promote_latest`** — **solo merge a `main`**: busca imagen en ECR por orden — SHA del **2º padre del merge** (tip de develop), tag **`:develop`**, luego `:SHA` del merge. El commit de merge tiene SHA **distinto** al build de develop.
-4. **`deploy_ecs`** — tras merge a **`main`**: corre **automático** (`on_success`) si existen **`ECS_CLUSTER`** y **`ECS_SERVICE`**. Para volver al botón manual: variable **`DEPLOY_ECS=manual`**. `allow_failure: true` si faltan vars ECS.
+4. **`deploy_ecs`** — tras merge a **`main`**: rollout ECS automático usando **`ECS_CLUSTER`** / **`ECS_SERVICE`** (defaults en `.gitlab-ci.yml`). Override en GitLab si tu infra difiere. **`DEPLOY_ECS=manual`** para botón manual.
 
 ### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)
 
