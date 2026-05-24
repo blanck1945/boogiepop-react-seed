@@ -1,19 +1,20 @@
-# GitLab CI — imagen linux/arm64 → ECR (`boogiepop-remote`) y rollout ECS opcional.
-# Contrato deploy: ../boogiepop-host/docs/DEPLOY-REMOTES.md
+# GitLab CI — linux/arm64 → ECR (`boogiepop-remote`) + ECS opcional.
 #
-# Pipelines (sin duplicados MR + rama):
-#   push develop → solo develop (lint + publish :develop)
-#   push main    → solo main (lint + publish :latest + deploy_ecs manual)
-#   tag v*.*.*   → publish + deploy_ecs manual
-#   MR → main    → no crea pipeline (validación al mergear = push main)
+# develop (push): lint + build/push imagen (:develop + :SHA)
+# main (solo merge MR en GitLab): retag :SHA → :latest + deploy_ecs manual (no bloquea pipeline)
+# Push directo a main SIN merge (p. ej. sync de refs): NO crea pipeline en main
+# Hotfix: variable CI RUN_MAIN_PIPELINE=true en push a main
 #
-# Variables CI/CD: AWS_*, ECR_REPOSITORY, VITE_REMOTE_BASE, ECS_CLUSTER/SERVICE (deploy).
+# Importante: `git push origin develop` (no `git push --all` ni push main+develop juntos).
 
 workflow:
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /See merge request !/
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^Merge branch '.+' into 'main'/
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
+    - if: $CI_PIPELINE_SOURCE == "web"
     - when: never
 
 stages:
@@ -27,6 +28,23 @@ variables:
   VITE_REMOTE_BASE: "/"
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
+
+# --- reglas reutilizables (expandidas; GitLab no permite anchor + when en líneas distintas) ---
+
+.if_push_develop:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
+
+.if_merge_to_main:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /See merge request !/
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^Merge branch '.+' into 'main'/
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"
+
+.if_release_tag:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
 
 .docker_dind_ubuntu:
   image:
@@ -92,13 +110,7 @@ variables:
     elif [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
       echo "AWS: autenticación con claves estáticas IAM (sin OIDC)."
     else
-      echo "=============================================="
-      echo "Falta autenticación AWS para este job."
-      echo "Opciones (una sola rutina suficiente):"
-      echo "  1) OIDC — Variable CI/AWS_ROLE_ARN + JWT del job (id_tokens en YAML)."
-      echo "  2) Claves — Variables AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY (Masked)."
-      echo "Variables Protected: solo aplican en ramas/tags protegidos."
-      echo "=============================================="
+      echo "Falta autenticación AWS (AWS_ROLE_ARN o claves IAM)."
       exit 1
     fi
   - aws sts get-caller-identity
@@ -140,10 +152,11 @@ lint:
   script:
     - npm run lint
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+    - !reference [.if_push_develop, rules]
+    - !reference [.if_merge_to_main, rules]
+    - !reference [.if_release_tag, rules]
 
+# Build completo solo en develop (y tags). Main reutiliza la imagen ya subida con :SHA.
 docker_publish:
   extends: .docker_dind_ubuntu
   stage: publish
@@ -160,8 +173,6 @@ docker_publish:
           --repository-name "${ECR_REPOSITORY}" \
           --region "${AWS_REGION}" \
           --image-scanning-configuration scanOnPush=true
-      else
-        echo "ECR OK: ${ECR_REPOSITORY}"
       fi
     - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
     - docker buildx create --use --name ci-arm --driver docker-container 2>/dev/null || docker buildx use ci-arm
@@ -171,9 +182,6 @@ docker_publish:
       TAGS="-t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${CI_COMMIT_SHORT_SHA}"
       if [ -n "${CI_COMMIT_TAG}" ]; then
         TAGS="${TAGS} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${CI_COMMIT_TAG}"
-      fi
-      if [ "${CI_COMMIT_BRANCH}" = "main" ]; then
-        TAGS="${TAGS} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
       fi
       if [ "${CI_COMMIT_BRANCH}" = "develop" ]; then
         TAGS="${TAGS} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:develop"
@@ -185,9 +193,44 @@ docker_publish:
         ${TAGS} \
         .
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+    - !reference [.if_push_develop, rules]
+    - !reference [.if_release_tag, rules]
+
+# Tras merge a main: promover :SHA (build en develop) → :latest sin rebuild.
+ecr_promote_latest:
+  stage: publish
+  image:
+    name: ubuntu:22.04
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    - *deploy_ecs_ubuntu_prep
+    - *aws_assume_role
+  script:
+    - |
+      set -e
+      SRC_TAG="${CI_COMMIT_SHORT_SHA}"
+      echo "Promoviendo ${ECR_REGISTRY}/${ECR_REPOSITORY}:${SRC_TAG} → :latest"
+      MANIFEST=$(aws ecr batch-get-image \
+        --repository-name "${ECR_REPOSITORY}" \
+        --region "${AWS_REGION}" \
+        --image-ids "imageTag=${SRC_TAG}" \
+        --query 'images[0].imageManifest' \
+        --output text)
+      if [ -z "${MANIFEST}" ] || [ "${MANIFEST}" = "None" ]; then
+        echo "No hay imagen con tag ${SRC_TAG}. Corré antes la pipeline en develop para este commit."
+        exit 1
+      fi
+      aws ecr put-image \
+        --repository-name "${ECR_REPOSITORY}" \
+        --region "${AWS_REGION}" \
+        --image-tag latest \
+        --image-manifest "${MANIFEST}"
+      echo "OK: :latest apunta al mismo digest que :${SRC_TAG}"
+  rules:
+    - !reference [.if_merge_to_main, rules]
 
 deploy_ecs:
   stage: deploy
@@ -198,9 +241,19 @@ deploy_ecs:
     GITLAB_OIDC_TOKEN:
       aud: https://gitlab.com
   needs:
+    - job: ecr_promote_latest
+      optional: true
     - job: docker_publish
+      optional: true
+  allow_failure: true
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /See merge request !/
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /^Merge branch '.+' into 'main'/
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"
       when: manual
     - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
       when: manual
