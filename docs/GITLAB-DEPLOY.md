@@ -10,7 +10,7 @@ Recomendado:
 |------|-----------|------------|
 | **`main`** | Producción (Escenario B) | `:latest` + `:«short-sha»` |
 | **`develop`** | Push `git push origin develop` | `lint` + build ECR **`:develop`** + **`:SHA`** |
-| **Merge MR → `main`** (botón en GitLab) | Commit con `See merge request !` o `Merge branch … into 'main'` | `lint` + **retag** `:SHA` → **`:latest`** + `deploy_ecs` manual (opcional, no bloquea) |
+| **Merge MR → `main`** (botón en GitLab) | Commit con `See merge request !` o `Merge branch … into 'main'` | `lint` + **retag** imagen de develop → **`:latest`** + `deploy_ecs` manual (opcional) |
 | **Push directo a `main`** (mismo SHA que develop, sin merge) | Sync accidental / `git push --all` | **No corre pipeline** en main |
 | **Hotfix en `main`** | Variable **`RUN_MAIN_PIPELINE=true`** en el push | Pipeline completa de main |
 
@@ -27,7 +27,7 @@ Pasos típicos en GitLab después del primer push:
 
 1. **`lint`** — push a `develop`, merge a `main`, o tag release.
 2. **`docker_publish`** — **solo `develop`** (y tags): build ARM64 → ECR.
-3. **`ecr_promote_latest`** — **solo merge a `main`**: copia manifest `:SHA` → `:latest` (sin rebuild).
+3. **`ecr_promote_latest`** — **solo merge a `main`**: busca imagen en ECR por orden — SHA del **2º padre del merge** (tip de develop), tag **`:develop`**, luego `:SHA` del merge. El commit de merge tiene SHA **distinto** al build de develop.
 4. **`deploy_ecs`** — manual en main/tags; **`allow_failure: true`** (pipeline **Passed**, deploy opcional).
 
 ### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)

@@ -196,12 +196,14 @@ docker_publish:
     - !reference [.if_push_develop, rules]
     - !reference [.if_release_tag, rules]
 
-# Tras merge a main: promover :SHA (build en develop) → :latest sin rebuild.
+# Tras merge a main: promover imagen ya buildeada en develop → :latest (el merge commit tiene SHA nuevo).
 ecr_promote_latest:
   stage: publish
   image:
     name: ubuntu:22.04
     entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://gitlab.com
@@ -211,24 +213,44 @@ ecr_promote_latest:
   script:
     - |
       set -e
-      SRC_TAG="${CI_COMMIT_SHORT_SHA}"
-      echo "Promoviendo ${ECR_REGISTRY}/${ECR_REPOSITORY}:${SRC_TAG} → :latest"
-      MANIFEST=$(aws ecr batch-get-image \
-        --repository-name "${ECR_REPOSITORY}" \
-        --region "${AWS_REGION}" \
-        --image-ids "imageTag=${SRC_TAG}" \
-        --query 'images[0].imageManifest' \
-        --output text)
-      if [ -z "${MANIFEST}" ] || [ "${MANIFEST}" = "None" ]; then
-        echo "No hay imagen con tag ${SRC_TAG}. Corré antes la pipeline en develop para este commit."
-        exit 1
+      promote_tag() {
+        tag="$1"
+        echo "Intentando promover tag '${tag}' → :latest"
+        manifest=$(aws ecr batch-get-image \
+          --repository-name "${ECR_REPOSITORY}" \
+          --region "${AWS_REGION}" \
+          --image-ids "imageTag=${tag}" \
+          --query 'images[0].imageManifest' \
+          --output text 2>/dev/null || true)
+        if [ -n "${manifest}" ] && [ "${manifest}" != "None" ] && [ "${manifest}" != "null" ]; then
+          aws ecr put-image \
+            --repository-name "${ECR_REPOSITORY}" \
+            --region "${AWS_REGION}" \
+            --image-tag latest \
+            --image-manifest "${manifest}"
+          echo "OK: :latest ← :${tag}"
+          return 0
+        fi
+        echo "  (tag '${tag}' no encontrado en ECR)"
+        return 1
+      }
+      CANDIDATES=""
+      # Merge commit: 2º padre = tip de develop mergeado (donde corre el build).
+      if git rev-parse "${CI_COMMIT_SHA}^2" >/dev/null 2>&1; then
+        MERGED_SHORT=$(git rev-parse --short=8 "${CI_COMMIT_SHA}^2")
+        echo "Merge detectado; SHA buildeado en develop: ${MERGED_SHORT}"
+        CANDIDATES="${MERGED_SHORT} ${CANDIDATES}"
       fi
-      aws ecr put-image \
-        --repository-name "${ECR_REPOSITORY}" \
-        --region "${AWS_REGION}" \
-        --image-tag latest \
-        --image-manifest "${MANIFEST}"
-      echo "OK: :latest apunta al mismo digest que :${SRC_TAG}"
+      CANDIDATES="${CANDIDATES} develop ${CI_COMMIT_SHORT_SHA}"
+      echo "Tags a probar:${CANDIDATES}"
+      for tag in ${CANDIDATES}; do
+        if promote_tag "${tag}"; then
+          exit 0
+        fi
+      done
+      echo "ERROR: ninguna imagen en ECR para este merge."
+      echo "Asegurate de que la pipeline de develop haya pasado (push develop) antes de mergear a main."
+      exit 1
   rules:
     - !reference [.if_merge_to_main, rules]
 
