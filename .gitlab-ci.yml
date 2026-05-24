@@ -25,7 +25,6 @@ cache:
 
 variables:
   AWS_DEFAULT_REGION: us-east-1
-  ECS_REFERENCE_TAG: "1.0.0"
   REMOTE_ECR_REPOSITORY: boogiepop-remote
   ECS_CLUSTER_NAME: boogiepop-api-cluster
   ECS_FRONT_REMOTE_SERVICE_NAME: boogiepop-api-fe-remote-svc
@@ -99,9 +98,9 @@ vite-build:
       BUILD_ARGS="--build-arg VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/} --build-arg VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}"
       COMMON="docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push ${BUILD_ARGS}"
       if [ "${CI_COMMIT_BRANCH}" = "main" ]; then
-        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
+        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:latest" .
       elif [ -n "${CI_COMMIT_TAG:-}" ]; then
-        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
+        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:latest" .
       else
         ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:develop" .
       fi
