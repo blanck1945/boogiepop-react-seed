@@ -1,13 +1,12 @@
 # GitLab CI — boogiepop-react-seed (remote MF)
-# Mismo modelo que boogiepop-host/.gitlab-ci.yml — ver docs/GITLAB-DEPLOY.md
+# Basado en boogiepop-host/.gitlab-ci.yml — ver docs/GITLAB-DEPLOY.md
 #
-# Siempre: lint + vite-build.
-# Push a develop: docker-publish-remote y deploy-remote-ecs aparecen como MANUAL (como el host).
+# develop (push): lint + vite-build; Docker/ECS MANUAL (staging, como el host).
+# main (push tras merge MR): lint + vite-build + Docker/ECS AUTOMÁTICO → prod (:latest + ECS).
 #
-# Variables de proyecto (Settings → CI/CD → Variables), igual que el host:
-# - ECR_REGISTRY (123456789012.dkr.ecr.us-east-1.amazonaws.com, sin /repo)
-# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-# ECS usa ECS_CLUSTER_NAME y ECS_FRONT_REMOTE_SERVICE_NAME (defaults abajo).
+# Variables (Settings → CI/CD → Variables), mismas credenciales que el host:
+# - ECR_REGISTRY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# - VITE_REMOTE_BASE (URL pública del MF en prod, ej. https://mf.tudominio.com/)
 
 stages:
   - verify
@@ -62,7 +61,7 @@ vite-build:
       - dist/
     expire_in: 1 week
 
-docker-publish-remote:
+.docker_publish_remote:
   stage: deploy
   image: ubuntu:22.04
   services:
@@ -74,10 +73,6 @@ docker-publish-remote:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_HOST: tcp://docker:2375
     FF_NETWORK_PER_BUILD: "1"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
-      when: manual
-    - when: never
   before_script:
     - apt-get update -qq
     - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip gnupg
@@ -101,30 +96,54 @@ docker-publish-remote:
       set -eux
       BASE_URI="${ECR_REGISTRY}/${REMOTE_ECR_REPOSITORY}"
       IMAGE_URI="${BASE_URI}:${IMAGE_TAG}"
-      EXTRA=""
-      if [ "${CI_PIPELINE_SOURCE:-}" = "merge_request_event" ] && [ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" = "develop" ]; then EXTRA=1; fi
-      if [ -n "${CI_COMMIT_TAG:-}" ]; then EXTRA=1; fi
-      if [ -n "${EXTRA}" ]; then
-        docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push \
-          --build-arg "VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/}" \
-          --build-arg "VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}" \
-          -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
+      BUILD_ARGS="--build-arg VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/} --build-arg VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}"
+      COMMON="docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push ${BUILD_ARGS}"
+      if [ "${CI_COMMIT_BRANCH}" = "main" ]; then
+        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
+      elif [ -n "${CI_COMMIT_TAG:-}" ]; then
+        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
       else
-        docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push \
-          --build-arg "VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/}" \
-          --build-arg "VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}" \
-          -t "${IMAGE_URI}" -t "${BASE_URI}:develop" .
+        ${COMMON} -t "${IMAGE_URI}" -t "${BASE_URI}:develop" .
       fi
+
+# Staging: manual en develop (igual host).
+docker-publish-remote:
+  extends: .docker_publish_remote
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+      when: manual
+    - when: never
+
+# Prod: automático al mergear MR → main (push a main).
+docker-publish-remote-prod:
+  extends: .docker_publish_remote
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+      when: on_success
+    - when: never
 
 deploy-remote-ecs:
   stage: deploy
-  dependencies: []
   image:
     name: amazon/aws-cli:2.27.25
     entrypoint: [""]
+  script:
+    - aws sts get-caller-identity
+    - aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_FRONT_REMOTE_SERVICE_NAME" --force-new-deployment --region "$AWS_DEFAULT_REGION"
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push"'
       when: manual
+    - when: never
+
+deploy-remote-ecs-prod:
+  stage: deploy
+  image:
+    name: amazon/aws-cli:2.27.25
+    entrypoint: [""]
+  needs: ["docker-publish-remote-prod"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+      when: on_success
     - when: never
   script:
     - aws sts get-caller-identity
