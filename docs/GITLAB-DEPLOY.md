@@ -9,9 +9,10 @@ Recomendado:
 | Rama | Propósito | Imagen ECR |
 |------|-----------|------------|
 | **`main`** | Producción (Escenario B) | `:latest` + `:«short-sha»` |
-| **`develop`** | Integración / staging | `:develop` + `:«short-sha»` |
-| **`feature/*`**, **`fix/*`** | Trabajo diario → MR contra `develop` | No publica imagen hasta merge |
-| **Tags `vX.Y.Z`** | Releases semver | etiqueta `:vX.Y.Z` (+ SHA) |
+| **`develop`** | Integración / staging | `:develop` + `:«short-sha»` (push directo; **sin** job `deploy_ecs`) |
+| **`feature/*`**, **`fix/*`** | Trabajo diario → MR contra `develop` | MR: **solo lint**; push sin MR abierto: lint |
+| **Tags `vX.Y.Z`** | Releases semver | etiqueta `:vX.Y.Z` (+ SHA); `deploy_ecs` manual |
+| **MR → `main`** (p. ej. `develop`→`main`) | Revisión pre-merge | **Solo `lint`** — no ECR, no ECS (evita pipeline “bloqueada” en deploy) |
 
 Pasos típicos en GitLab después del primer push:
 
@@ -22,9 +23,9 @@ Pasos típicos en GitLab después del primer push:
 
 ### Etapas
 
-1. **`lint`** — `npm run lint` en MR y pushes de rama.
-2. **`docker_publish`** — build **Docker linux/arm64** (nodos ECS **t4g**), push a **ECR** `ECR_REPOSITORY` (por defecto `boogiepop-remote`).
-3. **`deploy_ecs`** — **manual**, `aws ecs update-service --force-new-deployment` si configurás cluster/servicio.
+1. **`lint`** — MR y pushes de rama.
+2. **`docker_publish`** — solo **push** a `main`, `develop` o tag `v*.*.*` (nunca en MR).
+3. **`deploy_ecs`** — **manual**, solo tras **push a `main`** o tag release (no en `develop` ni en MR).
 
 ### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)
 
