@@ -63,7 +63,7 @@ Ese fallo aparece cuando **GitLab no pudo obtener credenciales AWS** válidas (`
 | Nunca cargaste **`AWS_ROLE_ARN`** ni claves IAM | **Settings → CI/CD → Variables:** agregá `AWS_ROLE_ARN` (OIDC) **o** `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`. |
 | Cargaste `AWS_ROLE_ARN` pero el JWT llega vacío | Trust policy del rol en IAM (issuer GitLab `https://gitlab.com`, `aud` coincide con **`https://gitlab.com`**), proyecto/ruta/`sub` permitidos. |
 | Las variables están **Protected** pero el job corre en rama/tag **sin proteger** | GitLab **no inyecta** variables Protected. Desmarcá *Protected*, o marcá **`main`** / **`develop`** como ramas protegidas y lanzá pipeline ahí. |
-| Typo | Nombre exacto: `AWS_ROLE_ARN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`. |
+| Error `XML_SetAllocTrackerActivationThreshold` / pyexpat al correr `aws` | Era el **apk aws-cli sobre Alpine**. Solución aplicada en repo: job en **Ubuntu 22.04 + instalador oficial** AWS CLI v2. Actualizá el repo si seguís en imagen antigua `docker:*-cli`. |
 
 Cuando algo de OIDC IAM no cuadra, podés usar **usuario IAM con claves** (solo entorno POC) sólo hasta dejar bien el rol OIDC.
 

@@ -4,6 +4,9 @@
 # Modelo de ramas: main → prod (+ tag :latest); develop → :develop; tags vX.Y.Z.
 # MRs: solo lint (workflow evita pipeline duplicada rama+MR cuando hay MR abierta).
 #
+# Nota runners: usa Ubuntu + instalador oficial AWS CLI v2 (glibc). El paquete
+# alpine `apk add aws-cli` puede romperse con pyexpat/libexpat en musl.
+#
 # Variables CI/CD (ejemplos Escenario B):
 #   AWS_REGION=us-east-1
 #   ECR_REPOSITORY=boogiepop-remote
@@ -13,7 +16,7 @@
 #   ECS_SERVICE=boogiepop-api-fe-remote-svc                   # opcional (+ job manual)
 #
 # IAM trust (OIDC): proveedor GitLab.com, audiencia https://gitlab.com
-# Runner: usar ejecutor con Docker; servicio docker:dind (muchas SaaS runners ya OK).
+# Runner: Docker-in-Docker; imagen cliente Ubuntu 22.04 para evitar fallos Alpine+aws-cli.
 
 workflow:
   rules:
@@ -35,14 +38,53 @@ variables:
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
 
-.docker_dind:
-  image: docker:24-cli
+.docker_dind_ubuntu:
+  image:
+    name: ubuntu:22.04
+    entrypoint: [""]
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
 
+# Instalador oficial AWS CLI v2 (GLIBC); sin paquete Alpine aws-cli frágil musl/expat.
+.ubuntu_tools_aws_docker_publish: &ubuntu_tools_aws_docker_publish
+  - |
+    set -eu
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates curl jq unzip docker.io
+    case "$(uname -m)" in
+      x86_64) AWS_CLI_ARCH=x86_64 ;;
+      aarch64) AWS_CLI_ARCH=aarch64 ;;
+      *)
+        echo "Runner arquitectura no soportada para awscliv2 oficial: $(uname -m)"
+        exit 1
+        ;;
+    esac
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_CLI_ARCH}.zip" \
+      -o /tmp/awscliv2.zip
+    unzip -qo /tmp/awscliv2.zip -d /tmp
+    rm -rf /usr/local/aws-cli 2>/dev/null || true
+    /tmp/aws/install -i /usr/local/aws-cli -b /usr/local/bin --update
+    aws --version
+    PLUGIN_DIR=/usr/local/lib/docker/cli-plugins
+    mkdir -p "$PLUGIN_DIR"
+    if ! docker buildx version >/dev/null 2>&1; then
+      case "$(uname -m)" in
+        x86_64) BX=amd64 ;;
+        aarch64) BX=arm64 ;;
+        *) BX="$(uname -m)" ;;
+      esac
+      BUILDX_REL="v0.18.0"
+      curl -fsSL \
+        "https://github.com/docker/buildx/releases/download/${BUILDX_REL}/buildx-${BUILDX_REL}.linux-${BX}" \
+        -o "$PLUGIN_DIR/docker-buildx"
+      chmod +x "$PLUGIN_DIR/docker-buildx"
+      export DOCKER_CLI_PLUGINS_PATH="/usr/local/lib/docker/cli-plugins"
+    fi
+    docker info
+
 .aws_assume_role: &aws_assume_role
-  - apk add --no-cache aws-cli jq
   - |
     if [ -n "${AWS_ROLE_ARN}" ] && [ -n "${GITLAB_OIDC_TOKEN:-}" ]; then
       CREDS=$(aws sts assume-role-with-web-identity \
@@ -85,6 +127,27 @@ variables:
   - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
   - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
+.deploy_ecs_ubuntu_prep: &deploy_ecs_ubuntu_prep
+  - |
+    set -eu
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates curl jq unzip
+    case "$(uname -m)" in
+      x86_64) AWS_CLI_ARCH=x86_64 ;;
+      aarch64) AWS_CLI_ARCH=aarch64 ;;
+      *)
+        echo "Runner arquitectura no soportada: $(uname -m)"
+        exit 1
+        ;;
+    esac
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_CLI_ARCH}.zip" \
+      -o /tmp/awscliv2.zip
+    unzip -qo /tmp/awscliv2.zip -d /tmp
+    rm -rf /usr/local/aws-cli 2>/dev/null || true
+    /tmp/aws/install -i /usr/local/aws-cli -b /usr/local/bin --update
+    aws --version
+
 lint:
   stage: lint
   image: node:22-alpine
@@ -103,12 +166,13 @@ lint:
     - if: $CI_COMMIT_BRANCH
 
 docker_publish:
-  extends: .docker_dind
+  extends: .docker_dind_ubuntu
   stage: publish
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://gitlab.com
   before_script:
+    - *ubuntu_tools_aws_docker_publish
     - *aws_assume_role
     - aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" --region "${AWS_REGION}"
     - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
@@ -142,7 +206,9 @@ docker_publish:
 # ECS: mismo rol OIDC/claves si el política incluye ecs:UpdateService.
 deploy_ecs:
   stage: deploy
-  image: docker:24-cli
+  image:
+    name: ubuntu:22.04
+    entrypoint: [""]
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: https://gitlab.com
@@ -157,6 +223,7 @@ deploy_ecs:
     - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
       when: manual
   before_script:
+    - *deploy_ecs_ubuntu_prep
     - *aws_assume_role
   script:
     - |
