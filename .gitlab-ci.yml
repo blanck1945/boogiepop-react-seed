@@ -1,12 +1,11 @@
-# GitLab CI — boogiepop-react-seed (remote MF)
-# Basado en boogiepop-host/.gitlab-ci.yml — ver docs/GITLAB-DEPLOY.md
+# GitLab CI — boogiepop-react-seed (remote MF en ECS /mf)
 #
-# develop (push): lint + vite-build; Docker/ECS MANUAL (staging, como el host).
-# main (push tras merge MR): lint + vite-build + Docker/ECS AUTOMÁTICO → prod (:latest + ECS).
+# develop (push): lint + vite-build; Docker/ECS MANUAL (staging).
+# main (push): lint + vite-build + Docker/ECS AUTOMÁTICO → ECR :latest + rollout ECS.
 #
-# Variables (Settings → CI/CD → Variables), mismas credenciales que el host:
-# - ECR_REGISTRY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-# - VITE_REMOTE_BASE (URL pública del MF en prod, ej. https://mf.tudominio.com/)
+# Variables (Settings → CI/CD → Variables):
+# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (obligatorias para Docker/ECS)
+# - ECR_REGISTRY, VITE_REMOTE_BASE tienen default en YAML (override opcional)
 
 stages:
   - verify
@@ -25,9 +24,11 @@ cache:
 
 variables:
   AWS_DEFAULT_REGION: us-east-1
+  ECR_REGISTRY: "653876198281.dkr.ecr.us-east-1.amazonaws.com"
   REMOTE_ECR_REPOSITORY: boogiepop-remote
   ECS_CLUSTER_NAME: boogiepop-api-cluster
   ECS_FRONT_REMOTE_SERVICE_NAME: boogiepop-api-fe-remote-svc
+  VITE_REMOTE_BASE: "http://boogiepop-api-alb-1499079717.us-east-1.elb.amazonaws.com/mf/"
 
 lint:
   stage: verify
@@ -75,6 +76,21 @@ vite-build:
   before_script:
     - apt-get update -qq
     - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip gnupg
+    - |
+      set -eu
+      if [ -z "${ECR_REGISTRY:-}" ]; then
+        echo "ERROR: ECR_REGISTRY vacía."
+        exit 1
+      fi
+      if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+        echo "ERROR: faltan AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY en CI/CD Variables (Protected en main)."
+        exit 1
+      fi
+      if [ -z "${VITE_REMOTE_BASE:-}" ]; then
+        echo "ERROR: VITE_REMOTE_BASE vacía — el MF no resolverá assets en prod."
+        exit 1
+      fi
+      echo "Build remote MF: VITE_REMOTE_BASE=${VITE_REMOTE_BASE}"
     - install -dm755 /etc/apt/keyrings
     - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     - chmod a+r /etc/apt/keyrings/docker.gpg
@@ -109,7 +125,7 @@ vite-build:
 docker-publish-remote:
   extends: .docker_publish_remote
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push"'
       when: manual
     - when: never
 
@@ -117,7 +133,7 @@ docker-publish-remote:
 docker-publish-remote-prod:
   extends: .docker_publish_remote
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
       when: on_success
     - when: never
 
@@ -141,9 +157,16 @@ deploy-remote-ecs-prod:
     entrypoint: [""]
   needs: ["docker-publish-remote-prod"]
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
       when: on_success
     - when: never
+  before_script:
+    - |
+      set -eu
+      if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+        echo "ERROR: faltan credenciales AWS en CI/CD Variables."
+        exit 1
+      fi
   script:
     - aws sts get-caller-identity
     - aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_FRONT_REMOTE_SERVICE_NAME" --force-new-deployment --region "$AWS_DEFAULT_REGION"
