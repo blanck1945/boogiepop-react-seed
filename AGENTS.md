@@ -22,7 +22,7 @@ Seed **React + Vite** empaquetado como **remote** de **Module Federation** (`boo
 | [package.json](package.json), [package-lock.json](package-lock.json) | Deps **fijas** (sin `^`/`~`). |
 | [Dockerfile](Dockerfile), [nginx.conf](nginx.conf), [.dockerignore](.dockerignore) | Build Node → nginx `:8080`, health `/health`. |
 | [.github/workflows/docker-ecr-ecs.yml](.github/workflows/docker-ecr-ecs.yml) | GitHub Actions: OIDC → ECR; ECS opcional (workflow_dispatch). |
-| [.gitlab-ci.yml](.gitlab-ci.yml), [docs/GITLAB-DEPLOY.md](docs/GITLAB-DEPLOY.md) | GitLab: lint MR, push **ARM64** a ECR `boogiepop-remote`, ECS manual. |
+| [.gitlab-ci.yml](.gitlab-ci.yml), [docs/GITLAB-DEPLOY.md](docs/GITLAB-DEPLOY.md) | GitLab (igual host): lint/build; Docker+ECS **manual** en push `develop`. |
 | [README.md](README.md) | Uso humano, env `VITE_*`, Docker. |
 
 ## Layout fullscreen en el hub (Module Federation)

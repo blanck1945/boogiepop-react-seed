@@ -1,301 +1,131 @@
-# GitLab CI — linux/arm64 → ECR (`boogiepop-remote`) + ECS opcional.
+# GitLab CI — boogiepop-react-seed (remote MF)
+# Mismo modelo que boogiepop-host/.gitlab-ci.yml — ver docs/GITLAB-DEPLOY.md
 #
-# develop (push): lint + build/push imagen (:develop + :SHA)
-# main (merge MR): retag develop → :latest + deploy_ecs automático (manual si DEPLOY_ECS=manual)
-# Push directo a main SIN merge (p. ej. sync de refs): NO crea pipeline en main
-# Hotfix: variable CI RUN_MAIN_PIPELINE=true en push a main
+# Siempre: lint + vite-build.
+# Push a develop: docker-publish-remote y deploy-remote-ecs aparecen como MANUAL (como el host).
 #
-# Importante: `git push origin develop` (no `git push --all` ni push main+develop juntos).
-
-workflow:
-  rules:
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)see merge request/
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)merge branch .+ into .?main/
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - when: never
+# Variables de proyecto (Settings → CI/CD → Variables), igual que el host:
+# - ECR_REGISTRY (123456789012.dkr.ecr.us-east-1.amazonaws.com, sin /repo)
+# - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# ECS usa ECS_CLUSTER_NAME y ECS_FRONT_REMOTE_SERVICE_NAME (defaults abajo).
 
 stages:
-  - lint
-  - publish
+  - verify
+  - build
   - deploy
 
+default:
+  interruptible: true
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
+
 variables:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: boogiepop-remote
-  # Defaults alineados a boogiepop-host/docs/DEPLOY-REMOTES.md (sobrescribir en CI/CD si difieren).
-  ECS_CLUSTER: boogiepop-api-cluster
-  ECS_SERVICE: boogiepop-api-fe-remote-svc
-  VITE_REMOTE_BASE: "/"
-  DOCKER_HOST: tcp://docker:2375
-  DOCKER_TLS_CERTDIR: ""
-
-# --- reglas reutilizables (expandidas; GitLab no permite anchor + when en líneas distintas) ---
-
-.if_push_develop:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"
-
-.if_merge_to_main:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)see merge request/
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)merge branch .+ into .?main/
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
-    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"
-
-.if_merge_to_main_deploy:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $DEPLOY_ECS == "manual"
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)see merge request/
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE =~ /(?i)merge branch .+ into .?main/
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main" && $RUN_MAIN_PIPELINE == "true"
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"
-      when: on_success
-
-.if_release_tag:
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
-
-.docker_dind_ubuntu:
-  image:
-    name: ubuntu:22.04
-    entrypoint: [""]
-  services:
-    - name: docker:29-dind
-      command: ["--tls=false"]
-
-.ubuntu_tools_aws_docker_publish: &ubuntu_tools_aws_docker_publish
-  - |
-    set -e
-    apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates curl jq unzip docker.io
-    case "$(uname -m)" in
-      x86_64) AWS_CLI_ARCH=x86_64 ;;
-      aarch64) AWS_CLI_ARCH=aarch64 ;;
-      *)
-        echo "Runner arquitectura no soportada para awscliv2 oficial: $(uname -m)"
-        exit 1
-        ;;
-    esac
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_CLI_ARCH}.zip" \
-      -o /tmp/awscliv2.zip
-    unzip -qo /tmp/awscliv2.zip -d /tmp
-    rm -rf /usr/local/aws-cli 2>/dev/null || true
-    /tmp/aws/install -i /usr/local/aws-cli -b /usr/local/bin --update
-    aws --version
-    PLUGIN_DIR=/usr/local/lib/docker/cli-plugins
-    mkdir -p "$PLUGIN_DIR"
-    if ! docker buildx version >/dev/null 2>&1; then
-      case "$(uname -m)" in
-        x86_64) BX=amd64 ;;
-        aarch64) BX=arm64 ;;
-        *) BX="$(uname -m)" ;;
-      esac
-      BUILDX_REL="v0.18.0"
-      curl -fsSL \
-        "https://github.com/docker/buildx/releases/download/${BUILDX_REL}/buildx-${BUILDX_REL}.linux-${BX}" \
-        -o "$PLUGIN_DIR/docker-buildx"
-      chmod +x "$PLUGIN_DIR/docker-buildx"
-      export DOCKER_CLI_PLUGINS_PATH="/usr/local/lib/docker/cli-plugins"
-    fi
-    docker info
-
-.aws_assume_role: &aws_assume_role
-  - |
-    if [ -n "${AWS_ROLE_ARN:-}" ] && [ -n "${GITLAB_OIDC_TOKEN:-}" ]; then
-      CREDS=$(aws sts assume-role-with-web-identity \
-        --role-arn "${AWS_ROLE_ARN}" \
-        --role-session-name "gitlab-ci-${CI_PIPELINE_ID}" \
-        --web-identity-token "${GITLAB_OIDC_TOKEN}" \
-        --duration-seconds 3600 \
-        --output json)
-      export AWS_ACCESS_KEY_ID
-      export AWS_SECRET_ACCESS_KEY
-      export AWS_SESSION_TOKEN
-      AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
-      AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
-      AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
-      export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-    elif [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-      echo "AWS: autenticación con claves estáticas IAM (sin OIDC)."
-    else
-      echo "Falta autenticación AWS (AWS_ROLE_ARN o claves IAM)."
-      exit 1
-    fi
-  - aws sts get-caller-identity
-  - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-  - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-.deploy_ecs_ubuntu_prep: &deploy_ecs_ubuntu_prep
-  - |
-    set -e
-    apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      ca-certificates curl jq unzip git
-    case "$(uname -m)" in
-      x86_64) AWS_CLI_ARCH=x86_64 ;;
-      aarch64) AWS_CLI_ARCH=aarch64 ;;
-      *)
-        echo "Runner arquitectura no soportada: $(uname -m)"
-        exit 1
-        ;;
-    esac
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_CLI_ARCH}.zip" \
-      -o /tmp/awscliv2.zip
-    unzip -qo /tmp/awscliv2.zip -d /tmp
-    rm -rf /usr/local/aws-cli 2>/dev/null || true
-    /tmp/aws/install -i /usr/local/aws-cli -b /usr/local/bin --update
-    aws --version
+  AWS_DEFAULT_REGION: us-east-1
+  ECS_REFERENCE_TAG: "1.0.0"
+  REMOTE_ECR_REPOSITORY: boogiepop-remote
+  ECS_CLUSTER_NAME: boogiepop-api-cluster
+  ECS_FRONT_REMOTE_SERVICE_NAME: boogiepop-api-fe-remote-svc
 
 lint:
-  stage: lint
-  image: node:22-alpine
-  cache:
-    key:
-      files:
-        - package-lock.json
-    paths:
-      - .npm/
-  before_script:
-    - npm ci --cache .npm --prefer-offline
+  stage: verify
+  image: node:22-bookworm-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
   script:
+    - npm ci
     - npm run lint
-  rules:
-    - !reference [.if_push_develop, rules]
-    - !reference [.if_merge_to_main, rules]
-    - !reference [.if_release_tag, rules]
 
-# Build completo solo en develop (y tags). Main reutiliza la imagen ya subida con :SHA.
-docker_publish:
-  extends: .docker_dind_ubuntu
-  stage: publish
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: https://gitlab.com
-  before_script:
-    - *ubuntu_tools_aws_docker_publish
-    - *aws_assume_role
-    - |
-      if ! aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" --region "${AWS_REGION}" >/dev/null 2>&1; then
-        echo "Repos ECR '${ECR_REPOSITORY}' no existe; creando (${AWS_REGION})…"
-        aws ecr create-repository \
-          --repository-name "${ECR_REPOSITORY}" \
-          --region "${AWS_REGION}" \
-          --image-scanning-configuration scanOnPush=true
-      fi
-    - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
-    - docker buildx create --use --name ci-arm --driver docker-container 2>/dev/null || docker buildx use ci-arm
-    - docker buildx inspect --bootstrap
+vite-build:
+  stage: build
+  image: node:22-bookworm-slim
+  needs: ["lint"]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
   script:
-    - |
-      TAGS="-t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${CI_COMMIT_SHORT_SHA}"
-      if [ -n "${CI_COMMIT_TAG}" ]; then
-        TAGS="${TAGS} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${CI_COMMIT_TAG}"
-      fi
-      if [ "${CI_COMMIT_BRANCH}" = "develop" ]; then
-        TAGS="${TAGS} -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:develop"
-      fi
-      echo "Building with VITE_REMOTE_BASE=${VITE_REMOTE_BASE}"
-      docker buildx build --platform linux/arm64 --push \
-        --build-arg "VITE_REMOTE_BASE=${VITE_REMOTE_BASE}" \
-        --build-arg VITE_DEV_SERVER_ORIGIN=http://localhost:5173 \
-        ${TAGS} \
-        .
-  rules:
-    - !reference [.if_push_develop, rules]
-    - !reference [.if_release_tag, rules]
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
 
-# Tras merge a main: promover imagen ya buildeada en develop → :latest (el merge commit tiene SHA nuevo).
-ecr_promote_latest:
-  stage: publish
-  image:
-    name: ubuntu:22.04
-    entrypoint: [""]
-  variables:
-    GIT_DEPTH: "0"
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: https://gitlab.com
-  before_script:
-    - *deploy_ecs_ubuntu_prep
-    - *aws_assume_role
-  script:
-    - |
-      set -e
-      promote_tag() {
-        tag="$1"
-        echo "Intentando promover tag '${tag}' → :latest"
-        manifest=$(aws ecr batch-get-image \
-          --repository-name "${ECR_REPOSITORY}" \
-          --region "${AWS_REGION}" \
-          --image-ids "imageTag=${tag}" \
-          --query 'images[0].imageManifest' \
-          --output text 2>/dev/null || true)
-        if [ -n "${manifest}" ] && [ "${manifest}" != "None" ] && [ "${manifest}" != "null" ]; then
-          aws ecr put-image \
-            --repository-name "${ECR_REPOSITORY}" \
-            --region "${AWS_REGION}" \
-            --image-tag latest \
-            --image-manifest "${manifest}"
-          echo "OK: :latest ← :${tag}"
-          return 0
-        fi
-        echo "  (tag '${tag}' no encontrado en ECR)"
-        return 1
-      }
-      CANDIDATES=""
-      # Merge commit: 2º padre = tip de develop mergeado (donde corre el build).
-      if git rev-parse "${CI_COMMIT_SHA}^2" >/dev/null 2>&1; then
-        MERGED_SHORT=$(git rev-parse --short=8 "${CI_COMMIT_SHA}^2")
-        echo "Merge detectado; SHA buildeado en develop: ${MERGED_SHORT}"
-        CANDIDATES="${MERGED_SHORT} ${CANDIDATES}"
-      fi
-      CANDIDATES="${CANDIDATES} develop ${CI_COMMIT_SHORT_SHA}"
-      echo "Tags a probar:${CANDIDATES}"
-      for tag in ${CANDIDATES}; do
-        if promote_tag "${tag}"; then
-          exit 0
-        fi
-      done
-      echo "ERROR: ninguna imagen en ECR para este merge."
-      echo "Asegurate de que la pipeline de develop haya pasado (push develop) antes de mergear a main."
-      exit 1
-  rules:
-    - !reference [.if_merge_to_main, rules]
-
-deploy_ecs:
+docker-publish-remote:
   stage: deploy
-  image:
-    name: ubuntu:22.04
-    entrypoint: [""]
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: https://gitlab.com
-  needs:
-    - job: ecr_promote_latest
-      optional: true
-    - job: docker_publish
-      optional: true
-  allow_failure: true
+  image: ubuntu:22.04
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  needs: ["vite-build"]
+  variables:
+    IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+    FF_NETWORK_PER_BUILD: "1"
   rules:
-    - !reference [.if_merge_to_main_deploy, rules]
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
-      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $ECR_REGISTRY'
+      when: manual
+    - when: never
   before_script:
-    - *deploy_ecs_ubuntu_prep
-    - *aws_assume_role
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip gnupg
+    - install -dm755 /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    - chmod a+r /etc/apt/keyrings/docker.gpg
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce-cli docker-buildx-plugin
+    - curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+    - unzip -q /tmp/awscliv2.zip -d /tmp
+    - /tmp/aws/install -i /usr/local/aws-cli -b /usr/local/bin
+    - aws sts get-caller-identity
+    - sleep 3
+    - docker info
+    - docker buildx create --name ci-remote-build --use 2>/dev/null || docker buildx use ci-remote-build
+    - docker run --privileged --rm tonistiigi/binfmt:latest --install all
+    - bash -cx 'REG_HOST=$(echo "${ECR_REGISTRY}" | cut -d/ -f1); aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${REG_HOST}"'
   script:
     - |
-      if [ -z "${ECS_CLUSTER:-}" ] || [ -z "${ECS_SERVICE:-}" ]; then
-        echo "Define ECS_CLUSTER y ECS_SERVICE en Variables CI/CD para lanzar rollout."
-        exit 1
+      set -eux
+      BASE_URI="${ECR_REGISTRY}/${REMOTE_ECR_REPOSITORY}"
+      IMAGE_URI="${BASE_URI}:${IMAGE_TAG}"
+      EXTRA=""
+      if [ "${CI_PIPELINE_SOURCE:-}" = "merge_request_event" ] && [ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" = "develop" ]; then EXTRA=1; fi
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then EXTRA=1; fi
+      if [ -n "${EXTRA}" ]; then
+        docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push \
+          --build-arg "VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/}" \
+          --build-arg "VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}" \
+          -t "${IMAGE_URI}" -t "${BASE_URI}:${ECS_REFERENCE_TAG}" -t "${BASE_URI}:latest" .
+      else
+        docker buildx build --platform linux/arm64 --provenance=false --sbom=false --push \
+          --build-arg "VITE_REMOTE_BASE=${VITE_REMOTE_BASE:-/}" \
+          --build-arg "VITE_DEV_SERVER_ORIGIN=${VITE_DEV_SERVER_ORIGIN:-http://localhost:5173}" \
+          -t "${IMAGE_URI}" -t "${BASE_URI}:develop" .
       fi
-      aws ecs update-service --cluster "${ECS_CLUSTER}" --service "${ECS_SERVICE}" \
-        --region "${AWS_REGION}" --force-new-deployment
+
+deploy-remote-ecs:
+  stage: deploy
+  dependencies: []
+  image:
+    name: amazon/aws-cli:2.27.25
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push"'
+      when: manual
+    - when: never
+  script:
+    - aws sts get-caller-identity
+    - aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_FRONT_REMOTE_SERVICE_NAME" --force-new-deployment --region "$AWS_DEFAULT_REGION"
