@@ -48,9 +48,11 @@ variables:
       command: ["--tls=false"]
 
 # Instalador oficial AWS CLI v2 (GLIBC); sin paquete Alpine aws-cli frágil musl/expat.
+# Usar solo `set -e` (no `-u`): before_script corre en el mismo shell y vars CI opcionales
+# como AWS_ROLE_ARN no deben disparar nounset antes del bloc de auth.
 .ubuntu_tools_aws_docker_publish: &ubuntu_tools_aws_docker_publish
   - |
-    set -eu
+    set -e
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl jq unzip docker.io
@@ -87,7 +89,7 @@ variables:
 
 .aws_assume_role: &aws_assume_role
   - |
-    if [ -n "${AWS_ROLE_ARN}" ] && [ -n "${GITLAB_OIDC_TOKEN:-}" ]; then
+    if [ -n "${AWS_ROLE_ARN:-}" ] && [ -n "${GITLAB_OIDC_TOKEN:-}" ]; then
       CREDS=$(aws sts assume-role-with-web-identity \
         --role-arn "${AWS_ROLE_ARN}" \
         --role-session-name "gitlab-ci-${CI_PIPELINE_ID}" \
@@ -130,7 +132,7 @@ variables:
 
 .deploy_ecs_ubuntu_prep: &deploy_ecs_ubuntu_prep
   - |
-    set -eu
+    set -e
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl jq unzip

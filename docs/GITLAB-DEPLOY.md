@@ -64,7 +64,8 @@ Ese fallo aparece cuando **GitLab no pudo obtener credenciales AWS** válidas (`
 | Cargaste `AWS_ROLE_ARN` pero el JWT llega vacío | Trust policy del rol en IAM (issuer GitLab `https://gitlab.com`, `aud` coincide con **`https://gitlab.com`**), proyecto/ruta/`sub` permitidos. |
 | Las variables están **Protected** pero el job corre en rama/tag **sin proteger** | GitLab **no inyecta** variables Protected. Desmarcá *Protected*, o marcá **`main`** / **`develop`** como ramas protegidas y lanzá pipeline ahí. |
 | `XML_SetAllocTrackerActivationThreshold` / pyexpat al correr `aws` | **`apk add aws-cli` en Alpine** (musl/expat); usá `.gitlab-ci.yml` actual (**Ubuntu + instalador oficial** awscliv2). |
-| `docker info` API `client … too new` / `Maximum supported API version is …` | **Cliente Docker (ubuntu `docker.io`) más nuevo que el servicio `docker:*-dind`.** Mantener **misma generación mayor** en `.gitlab-ci.yml` (`docker:NN-dind` vs cliente) o definir **`DOCKER_API_VERSION`** acorde al daemon solo como apaño puntual. |
+| `AWS_ROLE_ARN: unbound variable` tras `docker info` | **`set -u`** heredaba del script de bootstrap en el mismo `before_script`; si no definís OIDC **`AWS_ROLE_ARN`**, falla antes del `elif` de claves. Versión pipeline: sólo **`set -e`** en el instalador + tests con **`${AWS_ROLE_ARN:-}`**. |
+| `docker info` API `client … too new` / `Maximum supported API version is …` | **Cliente Docker (ubuntu `docker.io`) más nuevo que el servicio `docker:*-dind`.** Mantener **misma generación mayor** en `.gitlab-ci.yml` (`docker:NN-dind` vs cliente) o usar **`DOCKER_API_VERSION`** sólo como apaño puntual. |
 
 Cuando algo de OIDC IAM no cuadra, podés usar **usuario IAM con claves** (solo entorno POC) sólo hasta dejar bien el rol OIDC.
 
