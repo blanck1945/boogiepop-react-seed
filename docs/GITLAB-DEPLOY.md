@@ -1,86 +1,56 @@
 # GitLab CI/CD — Remote React (`boogiepop-react-seed`)
 
-Guía rápida alineada con el hub y AWS descritos en **`boogiepop-host/docs/DEPLOY-REMOTES.md`**.
+**Mismo modelo que el host:** [`boogiepop-host/.gitlab-ci.yml`](../../boogiepop-host/.gitlab-ci.yml) y [`boogiepop-host/docs/GLAB-CI.md`](../../boogiepop-host/docs/GLAB-CI.md).
 
-## Ramas (`Settings` → `Repository` → branching)
+Contrato AWS / manifest: [`boogiepop-host/docs/DEPLOY-REMOTES.md`](../../boogiepop-host/docs/DEPLOY-REMOTES.md).
 
-Recomendado:
+Archivo fuente: **`.gitlab-ci.yml`**.
 
-| Rama | Propósito | Imagen ECR |
-|------|-----------|------------|
-| **`main`** | Producción (Escenario B) | `:latest` + `:«short-sha»` |
-| **`develop`** | Push `git push origin develop` | `lint` + build ECR **`:develop`** + **`:SHA`** |
-| **Merge MR → `main`** (botón en GitLab) | Commit con `See merge request !` o `Merge branch … into 'main'` | `lint` + **retag** imagen de develop → **`:latest`** + `deploy_ecs` manual (opcional) |
-| **Push directo a `main`** (mismo SHA que develop, sin merge) | Sync accidental / `git push --all` | **No corre pipeline** en main |
-| **Hotfix en `main`** | Variable **`RUN_MAIN_PIPELINE=true`** en el push | Pipeline completa de main |
+## Qué corre siempre
 
-> Si ves **dos pipelines** (develop + main) con el **mismo SHA**, casi siempre se hizo **push a las dos ramas** (`git push --all` o push main+develop). Para día a día: **`git push origin develop`** solamente.
+- **`lint`** y **`vite-build`** en: merge requests, **`develop`**, **`main`** y tags.
+- Artefacto **`dist/`** (7 días) — validación de build; la imagen Docker vuelve a compilar en el job manual.
 
-Pasos típicos en GitLab después del primer push:
+Sin bloque **`workflow:`** especial (comportamiento estándar GitLab, igual que el host).
 
-1. **`Settings` → `Repository` → Protected branches**: proteger `main` y `develop` (merge vía MR, approvals opcionales).
-2. **`Settings` → `Merge requests`**: “Delete source branch”, squash opcional por convención de equipo.
+## Qué es opcional (manual)
 
-## Pipeline (`.gitlab-ci.yml`)
+En **push a `develop`** (con **`ECR_REGISTRY`** en variables del proyecto):
 
-### Etapas
+| Job | Acción |
+|-----|--------|
+| **`docker-publish-remote`** | Build **linux/arm64** → ECR repo **`boogiepop-remote`** (`:SHA` + `:develop`) |
+| **`deploy-remote-ecs`** | `aws ecs update-service` → **`boogiepop-api-fe-remote-svc`** |
 
-1. **`lint`** — push a `develop`, merge a `main`, o tag release.
-2. **`docker_publish`** — **solo `develop`** (y tags): build ARM64 → ECR.
-3. **`ecr_promote_latest`** — **solo merge a `main`**: busca imagen en ECR por orden — SHA del **2º padre del merge** (tip de develop), tag **`:develop`**, luego `:SHA` del merge. El commit de merge tiene SHA **distinto** al build de develop.
-4. **`deploy_ecs`** — manual en main/tags; **`allow_failure: true`** (pipeline **Passed**, deploy opcional).
+Ejecutalos cuando quieras publicar / rollout. **No fallan la pipeline si no los tocás** (igual que `docker-publish-front` / `deploy-front-ecs` en el host).
 
-### Variables CI/CD (`Settings` → `CI/CD` → `Variables`)
+Orden habitual: **Play en Docker** → esperar push ECR → **Play en ECS**.
 
-| Variable | Obligatorio | Notas |
-|----------|-------------|--------|
-| `AWS_ROLE_ARN` | Recomendado | Rol IAM para **OIDC** GitLab→AWS (`sts:AssumeRoleWithWebIdentity`). Alternativa: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. |
-| `AWS_REGION` | No | Por defecto `us-east-1`. |
-| `ECR_REPOSITORY` | No | Por defecto `boogiepop-remote` (nombre alineado a Terraform/DEPLOY-REMOTES). |
-| **`VITE_REMOTE_BASE`** | Sí en prod | URL pública del remote **terminada en `/`**, ej. `https://mf.tudominio.com/`. Si falla mal, los chunks MF dan 404. |
-| `ECS_CLUSTER` | Para deploy_ecs | Ej. `boogiepop-api-cluster`. |
-| `ECS_SERVICE` | Para deploy_ecs | Ej. `boogiepop-api-fe-remote-svc`. |
+## Variables en GitLab (Settings → CI/CD → Variables)
 
-Opcionalmente usá variables **marcadas Protected** por entorno (p. ej. `VITE_REMOTE_BASE` distinto en `develop` vs `main` mediante entornos o variables por reglas en GitLab 15.7+).
+Usá **las mismas credenciales AWS** que el host si compartís cuenta:
 
-### OIDC AWS ↔ GitLab
+| Variable | Uso |
+|----------|-----|
+| **`ECR_REGISTRY`** | Obligatoria para Docker manual (`653876198281.dkr.ecr.us-east-1.amazonaws.com` sin `/repo`). |
+| **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** | ECR + ECS (mismo usuario/rol que el host). |
+| **`ECS_CLUSTER_NAME`** | Default YAML: `boogiepop-api-cluster` (igual host). |
+| **`ECS_FRONT_REMOTE_SERVICE_NAME`** | Default YAML: `boogiepop-api-fe-remote-svc`. |
+| **`VITE_REMOTE_BASE`** | Build-arg Docker (URL pública del MF, terminada en `/`, ej. `https://mf.tudominio.com/`). |
 
-1. IAM → **Identity provider** Web identity: issuer `https://gitlab.com`, audiencia (`aud`) `https://gitlab.com`.
-2. IAM → Rol con **Trust relationship** al proveedor anterior; condition `StringEquals` con el path del proyecto, por ejemplo:
-   - `"gitlab.com/sub": "project_path:boogiepop-phatom/boogiepop-react-seed:ref_type:branch:ref:*"`
-   (ajustá namespace y proyecto; revisá política oficial GitLab/AWS).
+**Protected:** si AWS está *Protected*, el pipeline debe correr en rama protegida (`develop`) o la variable llega vacía.
 
-3. Política del rol/usuario IAM: **`ecr:GetAuthorizationToken`**; escritura sobre el repos **`ECR_REPOSITORY`** (`BatchCheckLayerAvailability`, `PutImage`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`). Para que **el job cree el repos la primera vez** (sin hacerlo antes en Terraform/consola), añadí **`ecr:DescribeRepositories`** y **`ecr:CreateRepository`**.
+## Diferencias con el host (solo nombres)
 
-### Runner
+| Host | Remote (este repo) |
+|------|-------------------|
+| `HOST_ECR_REPOSITORY` → `boogiepop-host` | `REMOTE_ECR_REPOSITORY` → `boogiepop-remote` |
+| `ECS_FRONT_HOST_SERVICE_NAME` | `ECS_FRONT_REMOTE_SERVICE_NAME` |
+| `docker-publish-front` | `docker-publish-remote` |
+| `deploy-front-ecs` | `deploy-remote-ecs` |
 
-Los jobs Docker usan **Ubuntu 22.04** como cliente (**awscliv2** + **`docker.io`**) y servicio **`docker:29-dind`**. Si usás ejecutores propios, suele hacer falta modo **privileged** o executor compatible con DinD.
+## Ramas
 
-GitLab SaaS runners compartidos suelen ejecutar estos jobs sin configuración extra; si ves fallos de conexión al daemon, revisá [documentación DinD GitLab](https://docs.gitlab.com/ee/ci/docker/using_docker_build.html).
-
-## Troubleshooting — “Definí AWS_ROLE_ARN…” / caída antes del `docker push`
-
-Ese fallo aparece cuando **GitLab no pudo obtener credenciales AWS** válidas (`before_script`). No es Docker: es login AWS/ECR.
-
-| Síntoma | Qué revisar |
-|--------|--------------|
-| Nunca cargaste **`AWS_ROLE_ARN`** ni claves IAM | **Settings → CI/CD → Variables:** agregá `AWS_ROLE_ARN` (OIDC) **o** `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`. |
-| Cargaste `AWS_ROLE_ARN` pero el JWT llega vacío | Trust policy del rol en IAM (issuer GitLab `https://gitlab.com`, `aud` coincide con **`https://gitlab.com`**), proyecto/ruta/`sub` permitidos. |
-| **`RepositoryNotFoundException`** (`boogiepop-remote`…) | Creá el repo en **AWS ECR** (misma cuenta/región) o poné **`ECR_REPOSITORY`** al nombre real (Terraform/GitOps). Si el usuario/rol tiene **`ecr:CreateRepository`**, el pipeline creará el repo la primera vez. |
-| `XML_SetAllocTrackerActivationThreshold` / pyexpat al correr `aws` | **`apk add aws-cli` en Alpine** (musl/expat); usá `.gitlab-ci.yml` actual (**Ubuntu + instalador oficial** awscliv2). |
-| `AWS_ROLE_ARN: unbound variable` tras `docker info` | **`set -u`** heredaba del script de bootstrap en el mismo `before_script`; si no definís OIDC **`AWS_ROLE_ARN`**, falla antes del `elif` de claves. Versión pipeline: sólo **`set -e`** en el instalador + tests con **`${AWS_ROLE_ARN:-}`**. |
-| `docker info` API `client … too new` / `Maximum supported API version is …` | **Cliente Docker (ubuntu `docker.io`) más nuevo que el servicio `docker:*-dind`.** Mantener **misma generación mayor** en `.gitlab-ci.yml` (`docker:NN-dind` vs cliente) o usar **`DOCKER_API_VERSION`** sólo como apaño puntual. |
-
-Cuando algo de OIDC IAM no cuadra, podés usar **usuario IAM con claves** (solo entorno POC) sólo hasta dejar bien el rol OIDC.
-
-## Orden recomendado (copiado del doc hub)
-
-```text
-1. Terraform / ECR «remote» + ECS (Escenario B)
-2. Pipeline `docker_publish` (main/develop/tag)
-3. Job manual `deploy_ecs` (o rollout externo / GitOps)
-4. Verificar remoteEntry.js (200)
-5. Actualizar manifest / `VITE_*` del host y redeploy host
-```
-
-Referencias cruzadas: [README § CI](../README.md), [ECS task ejemplo](../ecs/task-definition.sample.json) (adaptá **`runtimePlatform.cpuArchitecture`** a **ARM64** si el servicio Fargate usa t4g).
+- Trabajo en **`develop`** → push → lint/build automático; deploy manual cuando quieras.
+- **`main`**: lint/build (sin jobs Docker en push a main — igual criterio que host: deploy desde develop).
+- Tras deploy remote: actualizar manifest / `remoteEntry` en el **host** si cambió la URL (ver DEPLOY-REMOTES).

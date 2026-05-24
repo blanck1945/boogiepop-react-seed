@@ -127,7 +127,7 @@ Workflow: [`.github/workflows/docker-ecr-ecs.yml`](.github/workflows/docker-ecr-
 
 ### GitLab CI
 
-Pipeline [`.gitlab-ci.yml`](.gitlab-ci.yml): **lint** en MR/push de rama; **`docker_publish`** (Docker **linux/arm64** → ECR **`boogiepop-remote`** por defecto) en `main`, `develop` y tags **`v*.*.*`**; **`deploy_ecs`** manual. Ramas protegidas, OIDC IAM y variables: [`docs/GITLAB-DEPLOY.md`](docs/GITLAB-DEPLOY.md).
+Mismo patrón que **`boogiepop-host`**: [`docs/GITLAB-DEPLOY.md`](docs/GITLAB-DEPLOY.md) — siempre **lint** + **vite-build**; en push a **`develop`**, jobs manuales **`docker-publish-remote`** y **`deploy-remote-ecs`** (requieren **`ECR_REGISTRY`** + credenciales AWS, igual que el host).
 
 > En **GitHub Actions** o **GitLab CI**, si la task ECS apunta a `:latest`, `:develop` o al SHA del pipeline, alcanza con **`force-new-deployment`** tras el push a ECR; con **sólo tags inmutables**, registrá una nueva revisión de task con la etiqueta de imagen nueva.
 
