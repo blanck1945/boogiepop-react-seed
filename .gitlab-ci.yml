@@ -16,7 +16,7 @@
 #   ECS_SERVICE=boogiepop-api-fe-remote-svc                   # opcional (+ job manual)
 #
 # IAM trust (OIDC): proveedor GitLab.com, audiencia https://gitlab.com
-# Runner: Docker-in-Docker; imagen cliente Ubuntu 22.04 para evitar fallos Alpine+aws-cli.
+# Runner: Docker-in-Docker; cliente desde Ubuntu docker.io debe alinear API con DinD.
 
 workflow:
   rules:
@@ -43,7 +43,8 @@ variables:
     name: ubuntu:22.04
     entrypoint: [""]
   services:
-    - name: docker:24-dind
+    # Debe coincidir con ubuntu docker.io (~29.x / API ≥1.52); DinD viejo ⇒ "client too new".
+    - name: docker:29-dind
       command: ["--tls=false"]
 
 # Instalador oficial AWS CLI v2 (GLIBC); sin paquete Alpine aws-cli frágil musl/expat.
