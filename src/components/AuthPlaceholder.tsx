@@ -6,8 +6,8 @@ import { useBoogiepopSession } from 'boogiepop-auth-sdk/react'
  */
 export function AuthPlaceholder() {
   const { snapshot, isHydrating } = useBoogiepopSession()
-  const hasRoles = snapshot.roles.length > 0
-  const roleLabel = hasRoles ? snapshot.roles.join(', ') : 'sin roles'
+  const hasToken = Boolean(snapshot.token?.trim())
+  const roleLabel = snapshot.roles.length > 0 ? snapshot.roles.join(', ') : 'sin roles'
 
   return (
     <section
@@ -30,13 +30,21 @@ export function AuthPlaceholder() {
           <strong className="text-st-body">Origen:</strong>{' '}
           {isHydrating ? 'resolviendo…' : snapshot.source}
         </p>
-        <p>
-          <strong className="text-st-body">Usuario:</strong>{' '}
-          {snapshot.user?.email ?? snapshot.user?.name ?? 'no autenticado'}
-        </p>
-        <p>
-          <strong className="text-st-body">Roles:</strong> {roleLabel}
-        </p>
+        {!hasToken ? (
+          <p>
+            <strong className="text-st-body">Sesión:</strong> falta token
+          </p>
+        ) : (
+          <>
+            <p>
+              <strong className="text-st-body">Usuario:</strong>{' '}
+              {snapshot.user?.email ?? snapshot.user?.name ?? 'sin datos de usuario'}
+            </p>
+            <p>
+              <strong className="text-st-body">Roles:</strong> {roleLabel}
+            </p>
+          </>
+        )}
       </div>
     </section>
   )
