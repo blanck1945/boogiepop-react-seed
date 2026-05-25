@@ -132,7 +132,7 @@ vite-build:
 docker-publish-remote:
   extends: .docker_publish_remote
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $AWS_ROLE_ARN'
       when: manual
     - when: never
 
@@ -140,7 +140,7 @@ docker-publish-remote:
 docker-publish-remote-prod:
   extends: .docker_publish_remote
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $AWS_ROLE_ARN'
       when: on_success
     - when: never
 
@@ -165,7 +165,7 @@ deploy-remote-ecs:
     - aws sts get-caller-identity
     - aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_FRONT_REMOTE_SERVICE_NAME" --force-new-deployment --region "$AWS_DEFAULT_REGION"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == "develop" && $CI_PIPELINE_SOURCE == "push" && $AWS_ROLE_ARN'
       when: manual
     - when: never
 
@@ -179,7 +179,7 @@ deploy-remote-ecs-prod:
       aud: https://gitlab.com
   needs: ["docker-publish-remote-prod"]
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push" && $AWS_ROLE_ARN'
       when: on_success
     - when: never
   before_script:
