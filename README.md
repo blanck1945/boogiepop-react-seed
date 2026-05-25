@@ -4,7 +4,7 @@ Seed para equipos que quieren partir de una **SPA React con Vite** empaquetada c
 
 Para **convenciones, agentes y flujo spec-driven-lite** usá **[AGENTS.md](AGENTS.md)** y **[spec-kit/README.md](spec-kit/README.md)** (metodología alineada con el seed Streamlit hermano, sin CLI de GitHub spec-kit). Para **fullscreen edge-to-edge** cuando el hub monta el remote, revisá la sección *Layout fullscreen* en AGENTS.md y **`docs/LLM-hub-embed-layout.md`** en el repo `boogiepop-host`.
 
-Incluye **React Router**, **Tailwind CSS v4** y un marcador para **autenticación** que se definirá cuando el host inyecte sesión (pendiente).
+Incluye **React Router**, **Tailwind CSS v4** y un adapter de sesión para leer autenticación desde el host cuando corre federado o usar fallback local en standalone.
 
 ## Qué hay en el proyecto
 
@@ -40,6 +40,23 @@ En el **`remotes`** del host (pseudo-config), suele bastar **`entry`** al manife
 - Expuesto para el host: **`./Shell`** → string de consumo habitual **`boogiepopRemote/Shell`** (archivo fuente `./src/mf-remote/RemoteShell.tsx`)
 - Compartición de dependencias (**singleton`): `react`, `react-dom`, `react-router-dom`  
   Alineá versiones entre host y este remote para evitar conflictos.
+
+### Bridge de autenticación host/local
+
+- SDK npm: `@boogiepop/auth-sdk` (repo separado: `https://github.com/blanck1945/boogiepop-auth-sdk`).
+- **Federado en host:** intenta cargar `boogiepop_host/host-auth` y escucha cambios de sesión/roles.
+- **Standalone/local:** cae a token en query/storage y, con token válido, usa `GET /api/auth/me`.
+- Patrón recomendado: **`POST /api/auth/login` solo en host**; host/remotes consumen `GET /api/auth/me`.
+- Componente de ejemplo de consumo: `src/components/AuthPlaceholder.tsx`.
+
+SDK público para consumo interno del seed:
+
+- `@boogiepop/auth-sdk`
+  - `resolveBoogiepopSession()`
+  - `hasRole(snapshot, role)`
+  - `hasAnyRole(snapshot, roles)`
+- `@boogiepop/auth-sdk/react`
+  - `useBoogiepopSession()`
 
 Documentación oficial del plugin Vite:
 
@@ -157,7 +174,7 @@ npm run lint
 
 ## Pendiente (fuera del alcance inicial)
 
-- Contrato exacto entre **host** y remote para pasar usuario, token u otro contexto de autenticación (añadir cuando defináis el bridge en el host).
+- Endurecer contrato tipado cross-repo para `boogiepop_host/host-auth` (versionado compartido).
 - Repo o carpeta ejemplo de **host** consumiendo `boogiepopRemote`.
 
 ## Licencia
