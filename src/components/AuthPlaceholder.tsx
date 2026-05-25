@@ -1,4 +1,4 @@
-import { useBoogiepopSession } from '@boogiepop/auth-sdk/react'
+import { useBoogiepopSession } from 'boogiepop-auth-sdk/react'
 
 /**
  * Marcador hasta definir cómo el host inyecta sesión (token, usuario, claims).

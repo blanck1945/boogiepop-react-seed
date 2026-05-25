@@ -43,7 +43,7 @@ En el **`remotes`** del host (pseudo-config), suele bastar **`entry`** al manife
 
 ### Bridge de autenticación host/local
 
-- SDK npm: `@boogiepop/auth-sdk` (repo separado: `https://github.com/blanck1945/boogiepop-auth-sdk`).
+- SDK npm: `boogiepop-auth-sdk` (repo separado: `https://github.com/blanck1945/boogiepop-auth-sdk`).
 - **Federado en host:** intenta cargar `boogiepop_host/host-auth` y escucha cambios de sesión/roles.
 - **Standalone/local:** cae a token en query/storage y, con token válido, usa `GET /api/auth/me`.
 - Patrón recomendado: **`POST /api/auth/login` solo en host**; host/remotes consumen `GET /api/auth/me`.
@@ -51,11 +51,11 @@ En el **`remotes`** del host (pseudo-config), suele bastar **`entry`** al manife
 
 SDK público para consumo interno del seed:
 
-- `@boogiepop/auth-sdk`
+- `boogiepop-auth-sdk`
   - `resolveBoogiepopSession()`
   - `hasRole(snapshot, role)`
   - `hasAnyRole(snapshot, roles)`
-- `@boogiepop/auth-sdk/react`
+- `boogiepop-auth-sdk/react`
   - `useBoogiepopSession()`
 
 Documentación oficial del plugin Vite:
