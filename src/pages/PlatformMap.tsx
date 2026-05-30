@@ -18,6 +18,7 @@ import {
   SECTORS, SECTOR_EXTERNAL_CONNECTIONS,
   type NodeDetail, type NodeCategory,
 } from './platform/platformData'
+import { applyDagreLayout } from './platform/layout'
 import { PlatformNode } from './platform/PlatformNode'
 import { SectorNode } from './platform/SectorNode'
 import { OverviewNode } from './platform/OverviewNode'
@@ -86,7 +87,9 @@ function buildDetailGraph(sectorId: string): { nodes: Node[]; edges: Edge[] } {
     }
   })
 
-  return { nodes: [...internalNodes, ...extNodes], edges }
+  const allNodes = [...internalNodes, ...extNodes]
+  const laidOut  = applyDagreLayout(allNodes, edges, { direction: 'TB', rankSep: 140, nodeSep: 70 })
+  return { nodes: laidOut, edges }
 }
 
 // ─── Node types ───────────────────────────────────────────────────────────────
@@ -103,6 +106,7 @@ const LEGEND = [
   { category: 'backend', label: 'Backend' },
   { category: 'lib',     label: 'Libs' },
   { category: 'infra',   label: 'CI' },
+  { category: 'iac',     label: 'IaC' },
   { category: 'aws',     label: 'AWS' },
 ] as const
 

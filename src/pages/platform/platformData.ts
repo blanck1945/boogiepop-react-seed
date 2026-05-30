@@ -1,6 +1,6 @@
 import type { Node, Edge } from '@xyflow/react'
 
-export type NodeCategory = 'host' | 'seed' | 'backend' | 'lib' | 'infra' | 'aws'
+export type NodeCategory = 'host' | 'seed' | 'backend' | 'lib' | 'infra' | 'aws' | 'iac'
 
 export interface NodeDetail {
   id: string
@@ -20,6 +20,7 @@ export const CATEGORY_COLORS: Record<NodeCategory, { border: string; glow: strin
   lib:     { border: '#a855f7', glow: 'rgba(168,85,247,0.35)', badge: '#a855f7', text: '#d8b4fe' },
   infra:   { border: '#10b981', glow: 'rgba(16,185,129,0.35)', badge: '#10b981', text: '#6ee7b7' },
   aws:     { border: '#ff9900', glow: 'rgba(255,153,0,0.35)',  badge: '#ff9900', text: '#fcd34d' },
+  iac:     { border: '#f59e0b', glow: 'rgba(245,158,11,0.35)', badge: '#f59e0b', text: '#fde68a' },
 }
 
 export const SECTOR_COLORS = {
@@ -76,10 +77,10 @@ export const SECTORS: Record<string, SectorMeta> = {
   aws: {
     id: 'aws',
     label: 'AWS Infrastructure',
-    sublabel: 'ECR (registro Docker) + ECS Fargate (runtime)',
+    sublabel: 'Terraform IaC · ECR · ECS Fargate · ALB · S3 · Route53',
     color: SECTOR_COLORS.aws,
-    repos: ['Amazon ECR', 'Amazon ECS'],
-    nodeIds: ['ecr', 'ecs'],
+    repos: ['boogiepop-infra', 'Amazon ECR', 'Amazon ECS'],
+    nodeIds: ['infra', 'ecr', 'ecs'],
   },
 }
 
@@ -109,6 +110,7 @@ export const SECTOR_EXTERNAL_CONNECTIONS: Record<string, Array<{ nodeId: string;
     { nodeId: 'next-seed',      edgeLabel: 'docker push' },
     { nodeId: 'streamlit-seed', edgeLabel: 'docker push' },
     { nodeId: 'backend',        edgeLabel: 'docker push' },
+    { nodeId: 'cli',            edgeLabel: 'gestiona via IaC' },
   ],
 }
 
@@ -248,6 +250,22 @@ export const nodeDetails: Record<string, NodeDetail> = {
     github: 'https://github.com/blanck1945/boogiepop-cli',
     readme: 'https://github.com/blanck1945/boogiepop-cli/blob/main/README.md',
   },
+  infra: {
+    id: 'infra',
+    name: 'boogiepop-infra',
+    description: 'Infraestructura de la plataforma como código. Terraform gestiona todos los recursos AWS: VPC, ALB, ECS cluster, ECR repos, S3, CloudFront, Route53, ACM e IAM. Un archivo .tf por servicio.',
+    category: 'iac',
+    tech: ['Terraform >= 1.10', 'AWS Provider', 'GitLab Remote State', 'OIDC IAM', 'Fargate ARM64'],
+    relationships: [
+      'Crea y gestiona: VPC, ALB, ECS cluster, ECR repos',
+      'Gestiona: S3 hub manifest, CloudFront dashboard',
+      'Gestiona: Route53 DNS, ACM certs, Secrets Manager',
+      'IAM OIDC role para GitHub Actions — sin access keys',
+      'Patrón por servicio: ecr_X.tf + ecs_X.tf + alb_X.tf',
+    ],
+    github: 'https://gitlab.com/boogiepop-phatom/boogiepop-infra',
+    readme: 'https://gitlab.com/boogiepop-phatom/boogiepop-infra/-/blob/main/README.md',
+  },
   ecr: {
     id: 'ecr',
     name: 'Amazon ECR',
@@ -294,7 +312,7 @@ const AWS_Y     = 940
 const CI_H      = 160
 const FR_H      = 470
 const BACKEND_H = 180
-const AWS_H     = 160
+const AWS_H     = 180
 
 // Libs column spans FR + Backend
 const LIBS_H = FR_H + 40 + BACKEND_H   // 470 + 40 + 180 = 690
@@ -361,8 +379,9 @@ export const initialNodes: Node[] = [
   { id: 'ui',       type: 'platform', position: { x: LIBS_X + 20, y: FR_Y + 350 }, data: { detail: nodeDetails['ui'] } },
 
   // ── AWS sector ───────────────────────────────────────────────────────────────
-  { id: 'ecr', type: 'platform', position: { x: 190, y: AWS_Y + 50 }, data: { detail: nodeDetails['ecr'] } },
-  { id: 'ecs', type: 'platform', position: { x: 500, y: AWS_Y + 50 }, data: { detail: nodeDetails['ecs'] } },
+  { id: 'infra', type: 'platform', position: { x: 30,  y: AWS_Y + 50 }, data: { detail: nodeDetails['infra'] } },
+  { id: 'ecr',   type: 'platform', position: { x: 280, y: AWS_Y + 50 }, data: { detail: nodeDetails['ecr'] } },
+  { id: 'ecs',   type: 'platform', position: { x: 530, y: AWS_Y + 50 }, data: { detail: nodeDetails['ecs'] } },
 ]
 
 // ─── Edges ────────────────────────────────────────────────────────────────────
@@ -411,4 +430,8 @@ export const initialEdges: Edge[] = [
 
   // ECR → ECS
   { ...edgeBase, id: 'ecr-ecs', source: 'ecr', target: 'ecs', label: 'force-new-deployment', animated: true, style: { stroke: '#ff9900', strokeWidth: 2 } },
+
+  // Infra manages ECR + ECS (Terraform)
+  { ...edgeBase, id: 'tf-ecr', source: 'infra', target: 'ecr', label: 'terraform', style: { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '5 3' } },
+  { ...edgeBase, id: 'tf-ecs', source: 'infra', target: 'ecs', label: 'terraform', style: { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '5 3' } },
 ]

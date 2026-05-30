@@ -14,6 +14,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@tailwindcss/vite": "4.3.0",
     "@xyflow/react": "^12.10.2",
     "boogiepop-auth-sdk": "file:../boogiepop-auth-sdk",
