@@ -13,7 +13,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "boogiepop-auth-sdk": "0.1.0",
+    "boogiepop-auth-sdk": "file:../boogiepop-auth-sdk",
+    "boogiepop-ui": "file:../boogiepop-ui",
     "@tailwindcss/vite": "4.3.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",

@@ -6,6 +6,12 @@
 # Variables (Settings → CI/CD → Variables):
 # - AWS_ROLE_ARN (obligatoria para Docker/ECS vía OIDC)
 # - ECR_REGISTRY, VITE_REMOTE_BASE tienen default en YAML (override opcional)
+# - BYPASS_PROTECTED_FILES_CHECK=1 (solo Owner, emergencia)
+
+include:
+  - project: 'boogiepop-phatom/boogiepop-platform-guards'
+    file: '/guards/protected-files.yml'
+    ref: main
 
 stages:
   - verify
@@ -30,6 +36,37 @@ variables:
   ECS_CLUSTER_NAME: boogiepop-api-cluster
   ECS_FRONT_REMOTE_SERVICE_NAME: boogiepop-api-fe-remote-svc
   VITE_REMOTE_BASE: "http://boogiepop-api-alb-1499079717.us-east-1.elb.amazonaws.com/mf/"
+
+check-ci-integrity:
+  stage: verify
+  image: alpine:3.19
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+  script:
+    - |
+      if [ "${BYPASS_PROTECTED_FILES_CHECK:-0}" = "1" ]; then
+        echo "BYPASS activo — check salteado."
+        exit 0
+      fi
+      apk add --no-cache git > /dev/null 2>&1
+      if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+        BASE="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+      elif [ "${CI_COMMIT_BEFORE_SHA:-}" = "0000000000000000000000000000000000000000" ] || [ -z "${CI_COMMIT_BEFORE_SHA:-}" ]; then
+        echo "Primer commit — saltando check."
+        exit 0
+      else
+        BASE="$CI_COMMIT_BEFORE_SHA"
+      fi
+      git fetch origin "$BASE" --depth=1 > /dev/null 2>&1 || true
+      if git diff --name-only "$BASE" "$CI_COMMIT_SHA" | grep -qx "\.gitlab-ci\.yml"; then
+        echo "BLOQUEADO: .gitlab-ci.yml fue modificado — requiere intervención del Owner."
+        echo "Activar BYPASS_PROTECTED_FILES_CHECK=1 en Settings → CI/CD → Variables."
+        exit 1
+      fi
+      echo "OK: .gitlab-ci.yml no fue modificado."
 
 lint:
   stage: verify

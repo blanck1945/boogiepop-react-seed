@@ -8,6 +8,15 @@ Fuente de verdad: [package.json](../package.json), [package-lock.json](../packag
 - **Gestor**: **npm** con lockfile reproducible (`npm ci` en Dockerfile).
 - Dependencias sin rangos laxos (`^`) en deps principales según política actual del repo.
 
+## Paquetes internos Boogiepop
+
+| Paquete | Rol |
+|---------|-----|
+| `boogiepop-auth-sdk` | Resolución de sesión JWT: `resolveBoogiepopSession()`, `useBoogiepopSession()`, helpers `hasRole/hasWorkspace/hasAbility`. Devuelve `workspaces`, `roles` (objetos con `id/name/type/abilities`), `abilities`. |
+| `boogiepop-ui` | Librería de componentes y tokens de diseño. Importar estilos: `import 'boogiepop-ui/styles'`. Tokens `--bp-*` (azul `#4361ee`). Componentes: `Button`, `Card`, `Input`, `Select`, `Text`. |
+
+Ambos paquetes están referenciados como `file:../` en `package.json` (local dev). Al publicar, se pinchan a versiones semver.
+
 ## Runtime aplicación cliente
 
 - **Dev**: `npm run dev` — Vite; puerto por defecto **8008** y `origin` alineados en `vite.config.ts` (véase también `PORT` / `VITE_DEV_PORT` / `VITE_DEV_SERVER_ORIGIN`).

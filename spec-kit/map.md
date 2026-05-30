@@ -8,7 +8,7 @@ Referencia breve. Normas contractuales: [AGENTS.md](../AGENTS.md).
 |------|--------|
 | [src/pages/SeedLandingPage.tsx](../src/pages/SeedLandingPage.tsx) | Copy, bloques del seed, anclas `#detalle-del-seed`, secciones informativas. |
 | [src/components/](../src/components/) | Piezas locales (p. ej. `AuthPlaceholder`); sin navbar de producto. |
-| [src/index.css](../src/index.css) | Tokens tema tipo Streamlit, `.st-inline-code`, `.st-btn-*`. |
+| [src/index.css](../src/index.css) | Importa `boogiepop-ui/styles` y mapea tokens `--bp-*` a utilidades Tailwind (`text-bp-body`, `bg-bp-muted-bg`, etc.). No redefinir tokens acá; los cambios globales van en el repo `boogiepop-ui`. |
 | [public/favicon.svg](../public/favicon.svg), [index.html](../index.html) | Favicon SVG brote vectorial; `<title>Inicio · Boogiepop React Remote Seed`; fuentes IBM Plex. |
 
 ## Ajustás con conocimiento (impacto medio)
@@ -32,7 +32,9 @@ Referencia breve. Normas contractuales: [AGENTS.md](../AGENTS.md).
 
 | Ruta |
 |------|
-| [AGENTS.md](../AGENTS.md) |
+| [AGENTS.md](../AGENTS.md) — contrato técnico (fuente de verdad) |
+| [CLAUDE.md](../CLAUDE.md) — entrada automática para Claude Code (apunta a AGENTS.md) |
+| [.cursor/rules/seed-contract.mdc](../.cursor/rules/seed-contract.mdc) — entrada automática para Cursor (apunta a AGENTS.md) |
 | [spec-kit/README.md](README.md), este `map.md`, `stack.md`, `vite-react-notes.md`, workflows, templates |
 | [spec-kit/guia-replicacion-react-y-otros.md](guia-replicacion-react-y-otros.md) |
 | [specs/README.md](../specs/README.md) |

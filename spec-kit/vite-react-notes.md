@@ -12,10 +12,13 @@ Complemento a [AGENTS.md](../AGENTS.md) y [stack.md](stack.md). Sustituye el rol
 
 Este seed **no** incluye navbar de aplicación; el host la provee. El layout sólo contenido ([AppLayout.tsx](../src/layout/AppLayout.tsx)).
 
-## Estilos (look tipo Streamlit)
+## Estilos (boogiepop-ui)
 
-- Tokens y helpers en [src/index.css](../src/index.css): colores `#FF4B4B` primario, fondos `#fff` / `#f0f2f6`, texto `#31333f`, enlaces `#0068c9`; fuentes IBM Plex cargadas en [index.html](../index.html).
-- Preferir `.st-inline-code`, `.st-btn-primary`, `.st-btn-secondary` antes de nuevo sistema de botones si el objetivo es coherencia con apps Streamlit del mismo equipo.
+- Tokens de diseño en el paquete `boogiepop-ui`: primario `#4361ee` (azul), fondo `#fff` / `#f0f2f6`, texto `#1a1a2e`; fuentes IBM Plex.
+- [src/index.css](../src/index.css) importa `boogiepop-ui/styles` y expone utilidades Tailwind: `text-bp-body`, `bg-bp-muted-bg`, `border-bp-border`, `text-bp-muted`, etc.
+- Clases CSS directas disponibles globalmente: `.bp-btn-primary`, `.bp-btn-secondary`, `.bp-card`, `.bp-inline-code`, `.bp-muted`.
+- Componentes React: `import { Button, Card, Input, Select, Text } from 'boogiepop-ui'`.
+- **No redefinir tokens en el seed** — los cambios de diseño van en el repo `boogiepop-ui`.
 
 ## Module Federation + URLs
 
@@ -24,7 +27,10 @@ Este seed **no** incluye navbar de aplicación; el host la provee. El layout só
 
 ## Auth
 
-- **No** hay proveedor OAuth en el remote sólo; [AuthPlaceholder](../src/components/AuthPlaceholder.tsx) documenta pendiente del puente con el host ([AGENTS.md](../AGENTS.md)).
+- `boogiepop-auth-sdk` resuelve la sesión automáticamente: host-bridge (cuando corre federado) → `?bpToken` en URL → `sessionStorage` → `devToken` → sin sesión.
+- [AuthPlaceholder](../src/components/AuthPlaceholder.tsx) muestra el estado actual: origen, usuario, roles.
+- Para verificar permisos: `hasRole(snapshot, 'nombre')`, `hasWorkspace(snapshot, 'ws')`, `hasAbility(snapshot, 'ability')`.
+- No añadir OAuth propio al remote — el login ocurre en el host o externamente.
 
 ## Favicon + título de pestaña (paridad Streamlit)
 

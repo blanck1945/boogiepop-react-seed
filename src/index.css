@@ -1,127 +1,19 @@
 @import 'tailwindcss';
+@import 'boogiepop-ui/styles';
 
 /*
-  Look & feel inspirado en Streamlit (tema claro por defecto):
-  coral primario (~#FF4B4B), grises secundarios (#F0F2F6), texto #31333F, IBM Plex.
+  Mapeo de tokens bp-* a clases utilitarias Tailwind.
+  Genera: text-bp-body, bg-bp-muted-bg, border-bp-border, etc.
 */
-
 @theme {
-  --font-sans:
-    'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji';
-  --font-mono:
-    'IBM Plex Mono', ui-monospace, 'Roboto Mono', 'SF Mono', Consolas,
-    monospace;
+  --color-bp-primary:     var(--bp-primary);
+  --color-bp-accent:      var(--bp-accent);
+  --color-bp-bg:          var(--bp-bg);
+  --color-bp-muted-bg:    var(--bp-muted-bg);
+  --color-bp-body:        var(--bp-body);
+  --color-bp-muted:       var(--bp-muted);
+  --color-bp-border:      var(--bp-border);
 
-  --color-st-bg: #ffffff;
-  --color-st-muted-bg: #f0f2f6;
-  --color-st-body: #31333f;
-  --color-st-muted-text: #5d6672;
-  --color-st-border: #cfd3dc;
-  --color-st-primary: #ff4b4b;
-  --color-st-primary-hover: #e03636;
-  --color-st-link: #0068c9;
-}
-
-@layer base {
-  html {
-    -webkit-font-smoothing: antialiased;
-    scroll-behavior: smooth;
-  }
-
-  /*
-   * IMPORTANTE Module Federation:
-   * Este CSS vive también en el documento del host cuando carga `./Shell`.
-   * NO pongas aquí min-height global en html/body/#root — duplica viewport con el chrome
-   * del hub (navbar + footer) y genera scrollbar fantasma vertical.
-   * Modo SPA standalone: altura viene del wrapper `min-h-svh` en `App.tsx`.
-   */
-
-  body {
-    margin: 0;
-    background-color: var(--color-st-bg);
-    color: var(--color-st-body);
-    font-family: var(--font-sans);
-    font-size: 1rem;
-    line-height: 1.6;
-  }
-
-  h1,
-  h2,
-  h3 {
-    color: var(--color-st-body);
-    font-weight: 600;
-    line-height: 1.25;
-  }
-
-  a {
-    color: var(--color-st-link);
-  }
-
-  strong {
-    font-weight: 600;
-    color: var(--color-st-body);
-  }
-}
-
-@layer components {
-  .st-inline-code {
-    border-radius: 0.375rem;
-    background-color: var(--color-st-muted-bg);
-    padding-inline: 0.3rem;
-    padding-block: 0.125rem;
-    font-family: var(--font-mono);
-    font-size: 0.8125rem;
-    color: var(--color-st-body);
-  }
-
-  /* Botón primario tipo widget Streamlit */
-  .st-btn-primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.375rem;
-    border: 1px solid transparent;
-    background-color: var(--color-st-primary);
-    padding: 0.5rem 1.125rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    line-height: 1.35;
-    color: #ffffff !important;
-    text-decoration-line: none;
-    transition-property: background-color;
-    transition-duration: 120ms;
-  }
-
-  .st-btn-primary:hover {
-    background-color: var(--color-st-primary-hover);
-  }
-
-  .st-btn-primary:focus-visible,
-  .st-btn-secondary:focus-visible {
-    outline: 2px solid var(--color-st-link);
-    outline-offset: 2px;
-  }
-
-  .st-btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.375rem;
-    border: 1px solid var(--color-st-border);
-    background-color: var(--color-st-bg);
-    padding: 0.5rem 1.125rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    line-height: 1.35;
-    color: var(--color-st-body);
-    text-decoration-line: none;
-    transition-property: background-color, border-color;
-    transition-duration: 120ms;
-  }
-
-  .st-btn-secondary:hover {
-    border-color: #b8bec9;
-    background-color: var(--color-st-muted-bg);
-  }
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }

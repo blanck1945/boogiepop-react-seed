@@ -4,6 +4,12 @@ No reemplaza [AGENTS.md](../AGENTS.md). Es onboarding y manual de rutas para LLM
 
 **No** integramos la CLI de [GitHub spec-kit](https://github.com/github/spec-kit) ni slash-commands tipo `/speckit-*`; sólo Markdown y la convención opcional **`specs/`** (SPEC → PLAN → TASKS).
 
+## Entradas automáticas por herramienta
+
+- **Claude Code** carga [CLAUDE.md](../CLAUDE.md) automáticamente → apunta a AGENTS.md.
+- **Cursor** carga [.cursor/rules/seed-contract.mdc](../.cursor/rules/seed-contract.mdc) automáticamente → apunta a AGENTS.md.
+- **Otros agentes** leen [AGENTS.md](../AGENTS.md) directamente (fuente de verdad única).
+
 ## Orden de lectura recomendado (agente)
 
 1. **[AGENTS.md](../AGENTS.md)** — contrato: qué tocar, infra, MF (**obligatorio**).
