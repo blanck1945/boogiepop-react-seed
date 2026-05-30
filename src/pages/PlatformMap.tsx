@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import {
   ReactFlow,
   Background,
@@ -7,6 +7,8 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   type NodeMouseHandler,
   type Node,
 } from '@xyflow/react'
@@ -26,10 +28,11 @@ const LEGEND = [
   { category: 'infra',   label: 'Infra / CI' },
 ] as const
 
-export function PlatformMap() {
+function PlatformMapInner() {
   const [nodes, , onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
   const [selected, setSelected] = useState<NodeDetail | null>(null)
+  const { zoomIn, zoomOut } = useReactFlow()
 
   const onNodeClick: NodeMouseHandler<Node> = useCallback((_evt, node) => {
     const detail = nodeDetails[node.id]
@@ -37,6 +40,15 @@ export function PlatformMap() {
   }, [])
 
   const onPaneClick = useCallback(() => setSelected(null), [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '+' || e.key === '=') zoomIn({ duration: 200 })
+      if (e.key === '-')                   zoomOut({ duration: 200 })
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [zoomIn, zoomOut])
 
   return (
     <div style={{
@@ -82,7 +94,8 @@ export function PlatformMap() {
           {([
             { color: SECTOR_COLORS.ci,      label: 'CI / GitHub' },
             { color: SECTOR_COLORS.fr,      label: 'Frontend Remotes' },
-            { color: SECTOR_COLORS.backend, label: 'Backend & Libs' },
+            { color: SECTOR_COLORS.libs,    label: 'Libs' },
+            { color: SECTOR_COLORS.backend, label: 'Backend' },
             { color: SECTOR_COLORS.aws,     label: 'AWS' },
           ] as const).map(({ color, label }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -157,9 +170,17 @@ export function PlatformMap() {
           pointerEvents: 'none',
           zIndex: 5,
         }}>
-          CLICK EN UN NODO PARA VER DETALLES
+          CLICK NODO · SCROLL ZOOM · + / − TECLADO
         </div>
       )}
     </div>
+  )
+}
+
+export function PlatformMap() {
+  return (
+    <ReactFlowProvider>
+      <PlatformMapInner />
+    </ReactFlowProvider>
   )
 }
