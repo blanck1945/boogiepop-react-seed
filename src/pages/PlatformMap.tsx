@@ -80,9 +80,10 @@ export function PlatformMap() {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 20 }}>
           {/* Sector labels */}
           {([
-            { color: SECTOR_COLORS.infra,   label: 'Platform Infra' },
+            { color: SECTOR_COLORS.ci,      label: 'CI / GitHub' },
             { color: SECTOR_COLORS.fr,      label: 'Frontend Remotes' },
             { color: SECTOR_COLORS.backend, label: 'Backend & Libs' },
+            { color: SECTOR_COLORS.aws,     label: 'AWS' },
           ] as const).map(({ color, label }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 20, height: 1, background: color + '66' }} />
