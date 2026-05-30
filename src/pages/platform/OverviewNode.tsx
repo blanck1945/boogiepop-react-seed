@@ -2,12 +2,11 @@ import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 interface OverviewNodeProps {
   data: {
-    sectorId: string
+    id: string
     label: string
     sublabel: string
     repos: string[]
     color: string
-    onDrillDown: (sectorId: string) => void
   }
 }
 
@@ -20,11 +19,10 @@ const SECTOR_ICONS: Record<string, string> = {
 }
 
 export const OverviewNode = memo(({ data }: OverviewNodeProps) => {
-  const icon = SECTOR_ICONS[data.sectorId] ?? '◉'
+  const icon = SECTOR_ICONS[data.id] ?? '◉'
 
   return (
     <div
-      onClick={() => data.onDrillDown(data.sectorId)}
       style={{
         width: '100%',
         height: '100%',

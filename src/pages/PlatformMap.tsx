@@ -25,13 +25,13 @@ import { ExternalRefNode } from './platform/ExternalRefNode'
 import { DetailPanel } from './platform/DetailPanel'
 
 // ─── Overview graph ───────────────────────────────────────────────────────────
-function buildOverviewGraph(onDrillDown: (id: string) => void): { nodes: Node[]; edges: Edge[] } {
+function buildOverviewGraph(): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [
-    { id: 'ov-ci',      type: 'overview', position: { x: 0,   y: 0   }, style: { width: 700, height: 120 }, data: { ...SECTORS.ci,      onDrillDown } },
-    { id: 'ov-fr',      type: 'overview', position: { x: 0,   y: 160 }, style: { width: 460, height: 150 }, data: { ...SECTORS.fr,      onDrillDown } },
-    { id: 'ov-libs',    type: 'overview', position: { x: 490, y: 160 }, style: { width: 210, height: 150 }, data: { ...SECTORS.libs,    onDrillDown } },
-    { id: 'ov-backend', type: 'overview', position: { x: 0,   y: 350 }, style: { width: 340, height: 120 }, data: { ...SECTORS.backend, onDrillDown } },
-    { id: 'ov-aws',     type: 'overview', position: { x: 0,   y: 520 }, style: { width: 700, height: 120 }, data: { ...SECTORS.aws,     onDrillDown } },
+    { id: 'ov-ci',      type: 'overview', position: { x: 0,   y: 0   }, style: { width: 700, height: 120 }, data: { ...SECTORS.ci      } },
+    { id: 'ov-fr',      type: 'overview', position: { x: 0,   y: 160 }, style: { width: 460, height: 150 }, data: { ...SECTORS.fr      } },
+    { id: 'ov-libs',    type: 'overview', position: { x: 490, y: 160 }, style: { width: 210, height: 150 }, data: { ...SECTORS.libs    } },
+    { id: 'ov-backend', type: 'overview', position: { x: 0,   y: 350 }, style: { width: 340, height: 120 }, data: { ...SECTORS.backend } },
+    { id: 'ov-aws',     type: 'overview', position: { x: 0,   y: 520 }, style: { width: 700, height: 120 }, data: { ...SECTORS.aws     } },
   ]
   return { nodes, edges: [] }
 }
@@ -114,7 +114,7 @@ function PlatformMapInner() {
 
   // Build graph based on current view
   const { overviewNodes, overviewEdges } = useMemo(() => {
-    const g = buildOverviewGraph((id) => setActiveSector(id))
+    const g = buildOverviewGraph()
     return { overviewNodes: g.nodes, overviewEdges: g.edges }
   }, [])
 
@@ -143,11 +143,15 @@ function PlatformMapInner() {
   }, [activeSector]) // intentional: only re-run on sector change
 
   const onNodeClick: NodeMouseHandler<Node> = useCallback((_evt, node) => {
-    if (node.type === 'overview') return  // handled by OverviewNode's own onClick
-    if (node.type === 'externalRef') return
+    if (node.type === 'overview') {
+      const sectorId = (node.data as { id?: string }).id
+      if (sectorId) setActiveSector(sectorId)
+      return
+    }
+    if (node.type === 'externalRef' || node.type === 'sector') return
     const detail = nodeDetails[node.id]
     if (detail) setSelected(prev => prev?.id === detail.id ? null : detail)
-  }, [])
+  }, [setActiveSector])
 
   const onPaneClick = useCallback(() => setSelected(null), [])
 
