@@ -2,6 +2,47 @@
 
 Seed para equipos que quieren partir de una **SPA React con Vite** empaquetada como **remote** de **Module Federation** y desplegarla como **sitio estático en Docker** → **Amazon ECR** → **Amazon ECS**.
 
+---
+
+## En la plataforma
+
+```mermaid
+graph TD
+    HOST["boogiepop-host\nHost MF — monta los remotes"]
+    SEED["boogiepop-react-seed\nVite + React + Module Federation\n← este repo"]
+    UI["boogiepop-ui\nComponentes compartidos\nbp-* tokens / clases"]
+    AUTH["boogiepop-auth-sdk\nuseBoogiepopSession()\nresolveBoogiepopSession()"]
+    BACKEND["boogiepop-backend\nAPI REST\nPOST /api/auth/login\nGET /api/auth/me"]
+    GUARDS["boogiepop-platform-guards\nCI guard — protege AGENTS.md\ny .github/workflows/"]
+    CLI["boogiepop-cli\nbp update / bp versions\ngestión de versiones del seed"]
+    ECR["Amazon ECR\nRegistro de imágenes Docker"]
+    ECS["Amazon ECS\nServicio en producción\npuerto 8080"]
+
+    HOST -->|"loadRemote('boogiepopRemote/Shell')\nModule Federation"| SEED
+    SEED -->|"import components"| UI
+    SEED -->|"useBoogiepopSession()"| AUTH
+    AUTH -->|"GET /api/auth/me"| BACKEND
+    HOST -->|"POST /api/auth/login"| BACKEND
+
+    SEED -->|"Docker build → push"| ECR
+    ECR -->|"force-new-deployment"| ECS
+
+    GUARDS -->|"required status check\nbranch protection"| SEED
+    CLI -->|"boogiepop update\naplicar cambios del template"| SEED
+```
+
+| Parte | Rol respecto a este seed |
+|-------|--------------------------|
+| `boogiepop-host` | Monta este seed como remote MF via `boogiepopRemote/Shell` |
+| `boogiepop-ui` | Componentes React compartidos (`Button`, `Card`, `Input`, etc.) |
+| `boogiepop-auth-sdk` | Hook `useBoogiepopSession()` — consume sesión emitida por el host |
+| `boogiepop-backend` | Provee `GET /api/auth/me`; el login vive en el host, no acá |
+| `boogiepop-platform-guards` | Guard de CI que bloquea merges no autorizados sobre archivos protegidos |
+| `boogiepop-cli` | Gestiona versiones del seed — `bp update` aplica cambios del template |
+| AWS ECR / ECS | Imagen Docker construida en CI, servida en puerto 8080 |
+
+---
+
 Para **convenciones, agentes y flujo spec-driven-lite** usá **[AGENTS.md](AGENTS.md)** y **[spec-kit/README.md](spec-kit/README.md)** (metodología alineada con el seed Streamlit hermano, sin CLI de GitHub spec-kit). Para **fullscreen edge-to-edge** cuando el hub monta el remote, revisá la sección *Layout fullscreen* en AGENTS.md y **`docs/LLM-hub-embed-layout.md`** en el repo `boogiepop-host`.
 
 Incluye **React Router**, **Tailwind CSS v4** y un adapter de sesión para leer autenticación desde el host cuando corre federado o usar fallback local en standalone.
