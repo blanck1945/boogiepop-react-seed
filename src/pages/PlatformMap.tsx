@@ -11,11 +11,12 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { initialNodes, initialEdges, nodeDetails, CATEGORY_COLORS, type NodeDetail } from './platform/platformData'
+import { initialNodes, initialEdges, nodeDetails, CATEGORY_COLORS, SECTOR_COLORS, type NodeDetail } from './platform/platformData'
 import { PlatformNode } from './platform/PlatformNode'
+import { SectorNode } from './platform/SectorNode'
 import { DetailPanel } from './platform/DetailPanel'
 
-const nodeTypes = { platform: PlatformNode }
+const nodeTypes = { platform: PlatformNode, sector: SectorNode }
 
 const LEGEND = [
   { category: 'host',    label: 'Host' },
@@ -76,7 +77,22 @@ export function PlatformMap() {
           Platform Map
         </span>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 20 }}>
+          {/* Sector labels */}
+          {([
+            { color: SECTOR_COLORS.infra,   label: 'Platform Infra' },
+            { color: SECTOR_COLORS.fr,      label: 'Frontend Remotes' },
+            { color: SECTOR_COLORS.backend, label: 'Backend & Libs' },
+          ] as const).map(({ color, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 20, height: 1, background: color + '66' }} />
+              <span style={{ fontSize: 10, color: color + '88', letterSpacing: '0.06em' }}>{label}</span>
+            </div>
+          ))}
+
+          <div style={{ width: 1, height: 16, background: '#1e293b' }} />
+
+          {/* Node type legend */}
           {LEGEND.map(({ category, label }) => (
             <div key={category} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{

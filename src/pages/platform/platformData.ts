@@ -20,6 +20,13 @@ export const CATEGORY_COLORS: Record<NodeCategory, { border: string; glow: strin
   infra:   { border: '#10b981', glow: 'rgba(16,185,129,0.35)',  badge: '#10b981', text: '#6ee7b7' },
 }
 
+// ─── Sector colors ────────────────────────────────────────────────────────────
+export const SECTOR_COLORS = {
+  infra:   '#10b981',
+  fr:      '#3b82f6',
+  backend: '#f97316',
+}
+
 export const nodeDetails: Record<string, NodeDetail> = {
   host: {
     id: 'host',
@@ -124,7 +131,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
   guards: {
     id: 'guards',
     name: 'boogiepop-platform-guards',
-    description: 'Guards de CI centralizados. Reusable workflow de GitHub Actions que bloquea merges sobre AGENTS.md y .github/workflows/ si el Owner no aprobó. Protege todos los repos de la plataforma.',
+    description: 'Guards de CI centralizados. Reusable workflow de GitHub Actions que bloquea merges sobre AGENTS.md y .github/workflows/ si el Owner no aprobó.',
     category: 'infra',
     tech: ['GitHub Actions', 'Reusable Workflow', 'bash', 'gh CLI', 'Branch Protection'],
     relationships: [
@@ -139,7 +146,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
   cli: {
     id: 'cli',
     name: 'boogiepop-cli',
-    description: 'CLI para gestionar versiones y updates de seeds en proyectos downstream. Distribuido como npm package (Node devs) y binario standalone (sin Node — ideal para Streamlit devs).',
+    description: 'CLI para gestionar versiones y updates de seeds en proyectos downstream. Distribuido como npm package y binario standalone.',
     category: 'infra',
     tech: ['TypeScript', 'Commander', 'Inquirer', 'pkg (standalone binary)', 'Node.js'],
     relationships: [
@@ -153,44 +160,98 @@ export const nodeDetails: Record<string, NodeDetail> = {
   },
 }
 
+// ─── Layout constants ─────────────────────────────────────────────────────────
+const W = 860   // sector width
+const PAD = 20  // padding inside sector
+
+// Sector Y positions
+const INFRA_Y   = 0
+const FR_Y      = 200
+const BACKEND_Y = 730
+
+// Sector heights
+const INFRA_H   = 160
+const FR_H      = 490
+const BACKEND_H = 170
+
+// ─── Nodes ────────────────────────────────────────────────────────────────────
 export const initialNodes: Node[] = [
-  { id: 'host',          type: 'platform', position: { x: 310, y: 200 }, data: { detail: nodeDetails['host'] } },
-  { id: 'react-seed',    type: 'platform', position: { x: 40,  y: 420 }, data: { detail: nodeDetails['react-seed'] } },
-  { id: 'next-seed',     type: 'platform', position: { x: 310, y: 420 }, data: { detail: nodeDetails['next-seed'] } },
-  { id: 'streamlit-seed',type: 'platform', position: { x: 580, y: 420 }, data: { detail: nodeDetails['streamlit-seed'] } },
-  { id: 'auth-sdk',      type: 'platform', position: { x: 40,  y: 630 }, data: { detail: nodeDetails['auth-sdk'] } },
-  { id: 'ui',            type: 'platform', position: { x: 440, y: 630 }, data: { detail: nodeDetails['ui'] } },
-  { id: 'backend',       type: 'platform', position: { x: 230, y: 820 }, data: { detail: nodeDetails['backend'] } },
-  { id: 'guards',        type: 'platform', position: { x: 650, y: 60  }, data: { detail: nodeDetails['guards'] } },
-  { id: 'cli',           type: 'platform', position: { x: 40,  y: 60  }, data: { detail: nodeDetails['cli'] } },
+  // ── Sector backgrounds (rendered behind everything) ─────────────────────────
+  {
+    id: 'sector-infra',
+    type: 'sector',
+    position: { x: -PAD, y: INFRA_Y - PAD },
+    style: { width: W, height: INFRA_H, zIndex: -10, pointerEvents: 'none' },
+    data: { label: 'Platform Infra', sublabel: 'CI guards · version management', color: SECTOR_COLORS.infra },
+    selectable: false,
+    draggable: false,
+  },
+  {
+    id: 'sector-fr',
+    type: 'sector',
+    position: { x: -PAD, y: FR_Y - PAD },
+    style: { width: W, height: FR_H, zIndex: -10, pointerEvents: 'none' },
+    data: { label: 'Frontend Remotes', sublabel: 'Host · React seed · Next.js seed · Streamlit seed', color: SECTOR_COLORS.fr },
+    selectable: false,
+    draggable: false,
+  },
+  {
+    id: 'sector-backend',
+    type: 'sector',
+    position: { x: -PAD, y: BACKEND_Y - PAD },
+    style: { width: W, height: BACKEND_H, zIndex: -10, pointerEvents: 'none' },
+    data: { label: 'Backend & Libs', sublabel: 'API · Auth SDK · UI components', color: SECTOR_COLORS.backend },
+    selectable: false,
+    draggable: false,
+  },
+
+  // ── Infra sector nodes ───────────────────────────────────────────────────────
+  { id: 'cli',    type: 'platform', position: { x: 50,  y: INFRA_Y + 60 }, data: { detail: nodeDetails['cli'] } },
+  { id: 'guards', type: 'platform', position: { x: 610, y: INFRA_Y + 60 }, data: { detail: nodeDetails['guards'] } },
+
+  // ── FR sector nodes ──────────────────────────────────────────────────────────
+  { id: 'host',           type: 'platform', position: { x: 330, y: FR_Y + 50  }, data: { detail: nodeDetails['host'] } },
+  { id: 'react-seed',     type: 'platform', position: { x: 30,  y: FR_Y + 270 }, data: { detail: nodeDetails['react-seed'] } },
+  { id: 'next-seed',      type: 'platform', position: { x: 310, y: FR_Y + 270 }, data: { detail: nodeDetails['next-seed'] } },
+  { id: 'streamlit-seed', type: 'platform', position: { x: 590, y: FR_Y + 270 }, data: { detail: nodeDetails['streamlit-seed'] } },
+
+  // ── Backend sector nodes ─────────────────────────────────────────────────────
+  { id: 'backend',  type: 'platform', position: { x: 80,  y: BACKEND_Y + 50 }, data: { detail: nodeDetails['backend'] } },
+  { id: 'auth-sdk', type: 'platform', position: { x: 340, y: BACKEND_Y + 50 }, data: { detail: nodeDetails['auth-sdk'] } },
+  { id: 'ui',       type: 'platform', position: { x: 600, y: BACKEND_Y + 50 }, data: { detail: nodeDetails['ui'] } },
 ]
 
-const edgeBase = { type: 'smoothstep' as const, labelStyle: { fill: '#94a3b8', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }, labelBgStyle: { fill: '#0a0f1e', fillOpacity: 0.85 } }
+// ─── Edges ────────────────────────────────────────────────────────────────────
+const edgeBase = {
+  type: 'smoothstep' as const,
+  labelStyle: { fill: '#94a3b8', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' },
+  labelBgStyle: { fill: '#0a0f1e', fillOpacity: 0.85 },
+}
 
 export const initialEdges: Edge[] = [
   // Host → Seeds
-  { ...edgeBase, id: 'h-rs',  source: 'host', target: 'react-seed',     label: 'Module Federation', animated: true,  style: { stroke: '#3b82f6', strokeWidth: 2 } },
-  { ...edgeBase, id: 'h-ns',  source: 'host', target: 'next-seed',      label: 'iframe embed',      animated: false, style: { stroke: '#60a5fa', strokeWidth: 1.5, strokeDasharray: '6 3' } },
-  { ...edgeBase, id: 'h-ss',  source: 'host', target: 'streamlit-seed', label: 'iframe embed',      animated: false, style: { stroke: '#60a5fa', strokeWidth: 1.5, strokeDasharray: '6 3' } },
+  { ...edgeBase, id: 'h-rs', source: 'host', target: 'react-seed',     label: 'Module Federation', animated: true,  style: { stroke: '#3b82f6', strokeWidth: 2 } },
+  { ...edgeBase, id: 'h-ns', source: 'host', target: 'next-seed',      label: 'iframe embed',      animated: false, style: { stroke: '#60a5fa', strokeWidth: 1.5, strokeDasharray: '6 3' } },
+  { ...edgeBase, id: 'h-ss', source: 'host', target: 'streamlit-seed', label: 'iframe embed',      animated: false, style: { stroke: '#60a5fa', strokeWidth: 1.5, strokeDasharray: '6 3' } },
   // Host → Backend
-  { ...edgeBase, id: 'h-be',  source: 'host', target: 'backend',  label: 'REST API',    style: { stroke: '#f97316', strokeWidth: 2 } },
+  { ...edgeBase, id: 'h-be', source: 'host', target: 'backend',  label: 'REST API',   style: { stroke: '#f97316', strokeWidth: 2 } },
   // Host → UI
-  { ...edgeBase, id: 'h-ui',  source: 'host', target: 'ui',       label: 'npm import',  style: { stroke: '#a855f7', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'h-ui', source: 'host', target: 'ui',       label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
   // Seeds → Auth SDK
-  { ...edgeBase, id: 'rs-as', source: 'react-seed',     target: 'auth-sdk', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
-  { ...edgeBase, id: 'ns-as', source: 'next-seed',      target: 'auth-sdk', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'rs-as', source: 'react-seed', target: 'auth-sdk', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'ns-as', source: 'next-seed',  target: 'auth-sdk', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
   // Seeds → UI
   { ...edgeBase, id: 'rs-ui', source: 'react-seed', target: 'ui', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
   { ...edgeBase, id: 'ns-ui', source: 'next-seed',  target: 'ui', label: 'npm import', style: { stroke: '#a855f7', strokeWidth: 1.5 } },
   // Auth SDK → Backend
   { ...edgeBase, id: 'as-be', source: 'auth-sdk', target: 'backend', label: 'GET /api/auth/me', style: { stroke: '#f97316', strokeWidth: 2 } },
-  // Guards → all
-  { ...edgeBase, id: 'g-h',   source: 'guards', target: 'host',           label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
-  { ...edgeBase, id: 'g-rs',  source: 'guards', target: 'react-seed',     label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
-  { ...edgeBase, id: 'g-ns',  source: 'guards', target: 'next-seed',      label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
-  { ...edgeBase, id: 'g-ss',  source: 'guards', target: 'streamlit-seed', label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
+  // Guards → all repos
+  { ...edgeBase, id: 'g-h',  source: 'guards', target: 'host',           label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
+  { ...edgeBase, id: 'g-rs', source: 'guards', target: 'react-seed',     label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
+  { ...edgeBase, id: 'g-ns', source: 'guards', target: 'next-seed',      label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
+  { ...edgeBase, id: 'g-ss', source: 'guards', target: 'streamlit-seed', label: 'CI guard', style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '4 3' } },
   // CLI → Seeds
-  { ...edgeBase, id: 'c-rs',  source: 'cli', target: 'react-seed',     label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
-  { ...edgeBase, id: 'c-ns',  source: 'cli', target: 'next-seed',      label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
-  { ...edgeBase, id: 'c-ss',  source: 'cli', target: 'streamlit-seed', label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'c-rs', source: 'cli', target: 'react-seed',     label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'c-ns', source: 'cli', target: 'next-seed',      label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
+  { ...edgeBase, id: 'c-ss', source: 'cli', target: 'streamlit-seed', label: 'bp update', style: { stroke: '#06b6d4', strokeWidth: 1.5 } },
 ]
