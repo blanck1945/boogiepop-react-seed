@@ -1,0 +1,18 @@
+#!/bin/sh
+STAGED=$(git diff --cached --name-only)
+FOUND=""
+
+for f in AGENTS.md; do
+  echo "$STAGED" | grep -qx "$f" && FOUND="$FOUND $f"
+done
+for d in .github/workflows; do
+  echo "$STAGED" | grep -q "^$d/" && FOUND="$FOUND $d/"
+done
+
+if [ -n "$FOUND" ]; then
+  echo ""
+  echo "WARNING: archivos protegidos en este commit:"
+  for f in $FOUND; do echo "  - $f"; done
+  echo "  El PR va a requerir aprobacion del Owner para mergear."
+  echo ""
+fi
