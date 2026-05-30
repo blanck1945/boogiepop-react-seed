@@ -10,6 +10,7 @@ export interface NodeDetail {
   tech: string[]
   relationships: string[]
   github: string
+  readme?: string
 }
 
 export const CATEGORY_COLORS: Record<NodeCategory, { border: string; glow: string; badge: string; text: string }> = {
@@ -29,6 +30,88 @@ export const SECTOR_COLORS = {
   aws:     '#ff9900',
 }
 
+// ─── Sector metadata ──────────────────────────────────────────────────────────
+export interface SectorMeta {
+  id: string
+  label: string
+  sublabel: string
+  color: string
+  repos: string[]
+  nodeIds: string[]
+}
+
+export const SECTORS: Record<string, SectorMeta> = {
+  ci: {
+    id: 'ci',
+    label: 'CI / GitHub',
+    sublabel: 'Guards centralizados + gestión de versiones de seeds',
+    color: SECTOR_COLORS.ci,
+    repos: ['boogiepop-platform-guards', 'boogiepop-cli'],
+    nodeIds: ['cli', 'guards'],
+  },
+  fr: {
+    id: 'fr',
+    label: 'Frontend Remotes',
+    sublabel: 'Host MF + seeds React, Next.js y Streamlit',
+    color: SECTOR_COLORS.fr,
+    repos: ['boogiepop-host', 'boogiepop-react-seed', 'boogiepop-next-seed', 'boogiepop-streamlit-seed'],
+    nodeIds: ['host', 'react-seed', 'next-seed', 'streamlit-seed'],
+  },
+  libs: {
+    id: 'libs',
+    label: 'Libs',
+    sublabel: 'SDK de auth + componentes UI compartidos',
+    color: SECTOR_COLORS.libs,
+    repos: ['boogiepop-auth-sdk', 'boogiepop-ui'],
+    nodeIds: ['auth-sdk', 'ui'],
+  },
+  backend: {
+    id: 'backend',
+    label: 'Backend',
+    sublabel: 'API REST · JWT · catálogo de apps por roles',
+    color: SECTOR_COLORS.backend,
+    repos: ['boogiepop-backend'],
+    nodeIds: ['backend'],
+  },
+  aws: {
+    id: 'aws',
+    label: 'AWS Infrastructure',
+    sublabel: 'ECR (registro Docker) + ECS Fargate (runtime)',
+    color: SECTOR_COLORS.aws,
+    repos: ['Amazon ECR', 'Amazon ECS'],
+    nodeIds: ['ecr', 'ecs'],
+  },
+}
+
+// Which nodes connect to which sector (for the detail drill-down)
+export const SECTOR_EXTERNAL_CONNECTIONS: Record<string, Array<{ nodeId: string; edgeLabel: string }>> = {
+  ci:      [],
+  fr:      [
+    { nodeId: 'backend',  edgeLabel: 'REST API' },
+    { nodeId: 'auth-sdk', edgeLabel: 'npm import' },
+    { nodeId: 'ui',       edgeLabel: 'npm import' },
+    { nodeId: 'ecr',      edgeLabel: 'docker push' },
+  ],
+  libs:    [
+    { nodeId: 'backend',        edgeLabel: 'GET /api/auth/me' },
+    { nodeId: 'host',           edgeLabel: 'consumed by' },
+    { nodeId: 'react-seed',     edgeLabel: 'consumed by' },
+    { nodeId: 'next-seed',      edgeLabel: 'consumed by' },
+  ],
+  backend: [
+    { nodeId: 'auth-sdk', edgeLabel: 'auth/me' },
+    { nodeId: 'host',     edgeLabel: 'REST API' },
+    { nodeId: 'ecr',      edgeLabel: 'docker push' },
+  ],
+  aws:     [
+    { nodeId: 'host',           edgeLabel: 'docker push' },
+    { nodeId: 'react-seed',     edgeLabel: 'docker push' },
+    { nodeId: 'next-seed',      edgeLabel: 'docker push' },
+    { nodeId: 'streamlit-seed', edgeLabel: 'docker push' },
+    { nodeId: 'backend',        edgeLabel: 'docker push' },
+  ],
+}
+
 export const nodeDetails: Record<string, NodeDetail> = {
   host: {
     id: 'host',
@@ -44,6 +127,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Docker build → ECR → ECS (puerto 8080)',
     ],
     github: 'https://github.com/blanck1945/boogiepop-host',
+    readme: 'https://github.com/blanck1945/boogiepop-host/blob/main/README.md',
   },
   'react-seed': {
     id: 'react-seed',
@@ -58,6 +142,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Docker build → nginx:alpine → ECR → ECS (puerto 8080)',
     ],
     github: 'https://github.com/blanck1945/boogiepop-react-seed',
+    readme: 'https://github.com/blanck1945/boogiepop-react-seed/blob/main/README.md',
   },
   'next-seed': {
     id: 'next-seed',
@@ -72,6 +157,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Docker build → Node standalone → ECR → ECS (puerto 8080)',
     ],
     github: 'https://github.com/blanck1945/boogiepop-next-seed',
+    readme: 'https://github.com/blanck1945/boogiepop-next-seed/blob/main/README.md',
   },
   'streamlit-seed': {
     id: 'streamlit-seed',
@@ -86,6 +172,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Healthcheck: /_stcore/health',
     ],
     github: 'https://github.com/blanck1945/boogiepop-streamlit-seed',
+    readme: 'https://github.com/blanck1945/boogiepop-streamlit-seed/blob/main/README.md',
   },
   backend: {
     id: 'backend',
@@ -100,6 +187,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Docker build → ECR → ECS',
     ],
     github: 'https://github.com/blanck1945/boogiepop-backend',
+    readme: 'https://github.com/blanck1945/boogiepop-backend/blob/main/README.md',
   },
   'auth-sdk': {
     id: 'auth-sdk',
@@ -114,6 +202,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Llama GET /api/auth/me → boogiepop-backend',
     ],
     github: 'https://github.com/blanck1945/boogiepop-auth-sdk',
+    readme: 'https://github.com/blanck1945/boogiepop-auth-sdk/blob/main/README.md',
   },
   ui: {
     id: 'ui',
@@ -127,6 +216,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'Consumida por: host, react-seed, next-seed',
     ],
     github: 'https://github.com/blanck1945/boogiepop-ui',
+    readme: 'https://github.com/blanck1945/boogiepop-ui/blob/main/README.md',
   },
   guards: {
     id: 'guards',
@@ -141,6 +231,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'dismiss_stale_reviews + enforce_admins: bloqueo total',
     ],
     github: 'https://github.com/blanck1945/boogiepop-platform-guards',
+    readme: 'https://github.com/blanck1945/boogiepop-platform-guards/blob/main/README.md',
   },
   cli: {
     id: 'cli',
@@ -155,6 +246,7 @@ export const nodeDetails: Record<string, NodeDetail> = {
       'boogiepop abort — aborta update en progreso',
     ],
     github: 'https://github.com/blanck1945/boogiepop-cli',
+    readme: 'https://github.com/blanck1945/boogiepop-cli/blob/main/README.md',
   },
   ecr: {
     id: 'ecr',
