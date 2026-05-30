@@ -127,6 +127,7 @@ function PlatformMapInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(overviewEdges)
 
   // Switch graph when sector changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeSector && detailGraph) {
       setNodes(detailGraph.nodes)
@@ -135,9 +136,11 @@ function PlatformMapInner() {
       setNodes(overviewNodes)
       setEdges(overviewEdges)
     }
-    setSelected(null)
-    setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50)
-  }, [activeSector])
+    setTimeout(() => {
+      setSelected(null)
+      fitView({ padding: 0.2, duration: 400 })
+    }, 50)
+  }, [activeSector]) // intentional: only re-run on sector change
 
   const onNodeClick: NodeMouseHandler<Node> = useCallback((_evt, node) => {
     if (node.type === 'overview') return  // handled by OverviewNode's own onClick
