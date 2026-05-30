@@ -49,10 +49,10 @@ Además: el CSS global debe importarse en **`RemoteShell.tsx`** (`index.css`): e
 
 ## Áreas modificables sin drama
 
-- [src/pages/SeedLandingPage.tsx](src/pages/SeedLandingPage.tsx) — copy y secciones de la página única.
+- [src/pages/](src/pages/) — **las páginas son completamente reemplazables**. El agente puede crear páginas nuevas, reemplazar el contenido completo de cualquier archivo en esta carpeta, o eliminar páginas que el usuario ya no necesite. No ser conservador aquí: si el usuario pide reemplazar una página, reemplazarla entera.
+- [src/router/AppRoutes.tsx](src/router/AppRoutes.tsx) — rutas modificables cuando el alcance sea solo este seed. Agregar, quitar o cambiar rutas según lo que el usuario necesite.
 - [src/components/](src/components/) — componentes locales del remote.
 - [src/index.css](src/index.css) — tema y helpers (sin romper MF ni contraste ilegible).
-- Argumentos rutas/router en [src/router/AppRoutes.tsx](src/router/AppRoutes.tsx) cuando el alcance sea solo este seed y el host pueda absorb el contrato.
 
 ## Tocá con cautela
 
