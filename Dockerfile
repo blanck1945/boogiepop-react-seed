@@ -1,16 +1,22 @@
 # syntax=docker/dockerfile:1
+# Build context: parent directory (CI) so file: deps resolve.
 
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
+WORKDIR /workspace
+
+# Copy sibling packages available when build context is parent dir
+COPY boogiepop-auth-sdk/ ./boogiepop-auth-sdk/
+COPY boogiepop-ui/       ./boogiepop-ui/
+
+WORKDIR /workspace/app
+COPY boogiepop-react-seed/package.json boogiepop-react-seed/package-lock.json ./
 RUN npm ci
 
 FROM deps AS builder
-WORKDIR /app
-COPY . .
+WORKDIR /workspace/app
+COPY boogiepop-react-seed/ .
 
-# Base pública donde se servirán los chunks (ej. https://remote.ejemplo.com/ o '/' detrás del ALB en raíz).
 ARG VITE_REMOTE_BASE=/
 ENV VITE_REMOTE_BASE=${VITE_REMOTE_BASE}
 
@@ -24,8 +30,8 @@ RUN apk add --no-cache wget
 WORKDIR /usr/share/nginx/html
 RUN rm -rf ./*
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist ./
+COPY boogiepop-react-seed/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /workspace/app/dist ./
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1

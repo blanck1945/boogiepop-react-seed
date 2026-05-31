@@ -18,8 +18,19 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          path: boogiepop-react-seed
+
+      - uses: actions/checkout@v4
+        with:
+          repository: blanck1945/boogiepop-auth-sdk
+          path: boogiepop-auth-sdk
+
+      - uses: actions/checkout@v4
+        with:
+          repository: blanck1945/boogiepop-ui
+          path: boogiepop-ui
 
       - name: Configurar AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,6 +64,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: boogiepop-react-seed/Dockerfile
           push: true
           build-args: |
             VITE_REMOTE_BASE=${{ steps.vite.outputs.remote_base }}
