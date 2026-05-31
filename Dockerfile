@@ -5,10 +5,15 @@ ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /workspace
 
-# Copy sibling packages available when build context is parent dir
+# Build boogiepop-auth-sdk (dist/ not in repo — must be compiled)
 COPY boogiepop-auth-sdk/ ./boogiepop-auth-sdk/
-COPY boogiepop-ui/       ./boogiepop-ui/
+WORKDIR /workspace/boogiepop-auth-sdk
+RUN npm ci && npm run build
 
+# boogiepop-ui (dist/ already committed in repo)
+COPY boogiepop-ui/ /workspace/boogiepop-ui/
+
+# Install app deps
 WORKDIR /workspace/app
 COPY boogiepop-react-seed/package.json boogiepop-react-seed/package-lock.json ./
 RUN npm ci
