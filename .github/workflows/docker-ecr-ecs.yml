@@ -2,6 +2,8 @@ name: Docker build → ECR (ECS opcional)
 
 # Activa también `push.branches` cuando tengáis configurado OIDC (secret AWS_ROLE_ARN) y vars de ECR.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -59,14 +61,10 @@ jobs:
             ${{ steps.meta.outputs.image_uri }}:${{ github.sha }}
             ${{ steps.meta.outputs.image_uri }}:latest
 
-      - name: Forzar nuevo despliegue en ECS (opcional)
-        if: ${{ vars.ECS_CLUSTER != '' && vars.ECS_SERVICE != '' }}
+      - name: Forzar nuevo despliegue en ECS
         run: |
           aws ecs update-service \
-            --cluster "${ECS_CLUSTER}" \
-            --service "${ECS_SERVICE}" \
-            --region "${AWS_REGION}" \
+            --cluster boogiepop-api-cluster \
+            --service boogiepop-api-fe-remote-svc \
+            --region us-east-1 \
             --force-new-deployment
-        env:
-          ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
-          ECS_SERVICE: ${{ vars.ECS_SERVICE }}
