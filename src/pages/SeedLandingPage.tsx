@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { AuthPlaceholder } from '../components/AuthPlaceholder'
 
 const features = [
@@ -60,6 +61,9 @@ export function SeedLandingPage() {
           >
             Documentación MF + Vite
           </a>
+          <Link to="/platform" className="bp-btn-secondary">
+            Platform Map →
+          </Link>
         </div>
       </header>
 
