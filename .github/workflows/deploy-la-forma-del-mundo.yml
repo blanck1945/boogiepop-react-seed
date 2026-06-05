@@ -1,0 +1,64 @@
+name: Deploy La Forma del Mundo → ECR/ECS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: boogiepop-la-forma-del-mundo-prod
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: boogiepop-la-forma-del-mundo
+  ECS_CLUSTER: boogiepop-api-cluster
+  ECS_SERVICE: boogiepop-api-fe-la-forma-del-mundo-svc
+  VITE_REMOTE_BASE: /la-forma-del-mundo/
+  NGINX_BASE_PATH: la-forma-del-mundo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::653876198281:role/boogiepop-api-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Build y push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/arm64
+          build-args: |
+            VITE_REMOTE_BASE=${{ env.VITE_REMOTE_BASE }}
+            NGINX_BASE_PATH=${{ env.NGINX_BASE_PATH }}
+            VITE_DEV_SERVER_ORIGIN=http://localhost:5173
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+
+      - name: Forzar nuevo despliegue ECS
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --region "${AWS_REGION}" \
+            --force-new-deployment
