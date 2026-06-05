@@ -1,4 +1,4 @@
-import { useBoogiepopSession } from 'boogiepop-auth-sdk/react'
+import { useBoogiepopSession } from '@boogiepop/auth-sdk/react'
 
 /**
  * Marcador hasta definir cómo el host inyecta sesión (token, usuario, claims).
@@ -7,7 +7,10 @@ import { useBoogiepopSession } from 'boogiepop-auth-sdk/react'
 export function AuthPlaceholder() {
   const { snapshot, isHydrating } = useBoogiepopSession()
   const hasToken = Boolean(snapshot.token?.trim())
-  const roleLabel = snapshot.roles.length > 0 ? snapshot.roles.map((r) => r.name).join(', ') : 'sin roles'
+  const roleLabel =
+    snapshot.roles.length > 0
+      ? snapshot.roles.map((r) => (typeof r === 'string' ? r : r.name)).join(', ')
+      : 'sin roles'
 
   return (
     <section
